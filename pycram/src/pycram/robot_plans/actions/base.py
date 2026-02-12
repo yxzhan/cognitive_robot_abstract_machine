@@ -91,7 +91,7 @@ class ActionDescription(DesignatorDescription, HasParameters):
         cls._post_perform_callbacks.append(func)
         return func
 
-    def get_bound_variables(self) -> Dict[str, Variable[Type[T]]]:
+    def get_bound_variables(self) -> Dict[T, Variable[T] | T]:
         self_fields = list(fields(self))
         [self_fields.remove(parent_field) for parent_field in fields(ActionDescription)]
         return {
@@ -101,7 +101,7 @@ class ActionDescription(DesignatorDescription, HasParameters):
             for f in self_fields
         }
 
-    def get_unbound_variables(self) -> Dict[str, Variable[Type[T]]]:
+    def get_unbound_variables(self) -> Dict[T, Variable[T] | T]:
         self_fields = list(fields(self))
         [self_fields.remove(parent_field) for parent_field in fields(ActionDescription)]
         return {
@@ -112,7 +112,7 @@ class ActionDescription(DesignatorDescription, HasParameters):
             for f in self_fields
         }
 
-    def get_variables(self, unbound=False) -> Dict[Any, Variable[Type[T]]]:
+    def get_variables(self, unbound=False) -> Dict[T, Variable[T] | T]:
         # Maybe use python-box for a better interface
         return self.get_unbound_variables() if unbound else self.get_bound_variables()
 

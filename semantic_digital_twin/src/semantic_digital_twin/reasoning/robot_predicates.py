@@ -16,7 +16,7 @@ from krrood.entity_query_language.entity_result_processors import an, the
 
 from ..collision_checking.collision_detector import Collision, CollisionCheck
 from ..collision_checking.trimesh_collision_detector import TrimeshCollisionDetector
-from ..robots.abstract_robot import AbstractRobot, ParallelGripper
+from ..robots.abstract_robot import AbstractRobot, ParallelGripper, Manipulator
 from ..spatial_computations.raytracer import RayTracer
 from ..spatial_types import HomogeneousTransformationMatrix
 from ..world_description.world_entity import Body
@@ -114,7 +114,7 @@ def blocking(
 
 
 def is_body_in_gripper(
-    body: Body, gripper: ParallelGripper, sample_size: int = 100
+    body: Body, gripper: Manipulator, sample_size: int = 100
 ) -> float:
     """
     Check if the body in the gripper.
@@ -148,3 +148,16 @@ def is_body_in_gripper(
 
     points, index_ray, bodies = rt.ray_test(finger_points, thumb_points)
     return len([b for b in bodies if b == body]) / sample_size
+
+
+def gripper_is_holding_something(gripper: Manipulator) -> bool:
+    """
+    Check if the gripper is holding something.
+
+    :param gripper: The gripper for which the check should be done.
+    :return: True if there is a body mounted beneath the gripper in the kinematic chain.
+    """
+    bodies_under_tcp = gripper._world.get_kinematic_structure_entities_of_branch(
+        gripper.tool_frame
+    )
+    return len(bodies_under_tcp) > 0

@@ -7,6 +7,8 @@ from datetime import timedelta
 from typing_extensions import Union, Optional, Type, Any, Iterable
 
 from krrood.entity_query_language.entity import and_
+from krrood.entity_query_language.predicate import Symbol
+from krrood.entity_query_language.symbolic import SymbolicExpression
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.reasoning.predicates import reachable
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
@@ -191,8 +193,8 @@ class PickUpAction(ActionDescription):
             ),
         ).perform()
 
-    def pre_condition(self):
-        variables = self.get_variables()
+    def pre_condition(self, bound=True) -> SymbolicExpression:
+        variables = self.get_variables(bound)
         condition = and_(
             GripperIsFree(variables[self.arm]),
             reachable(
