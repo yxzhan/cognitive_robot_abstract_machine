@@ -537,12 +537,15 @@ class Connection1DOFConverter(ConnectionConverter, ABC):
         px, py, pz, qw, qx, qy, qz = cas_pose_to_list(child_T_connection_transform)
         joint_pos = [px, py, pz]
         joint_quat = [qw, qx, qy, qz]
+        joint_range = [dof.limits.lower.position, dof.limits.upper.position]
+        if any([r is None for r in joint_range]):
+            joint_range = [0, 0]
         joint_props.update(
             {
                 self.pos_str: joint_pos,
                 self.quat_str: joint_quat,
                 self.axis_str: entity.axis.to_np().tolist()[:3],
-                self.range_str: [dof.limits.lower.position, dof.limits.upper.position],
+                self.range_str: joint_range,
                 self.armature_str: entity.dynamics.armature,
                 self.dry_friction_str: entity.dynamics.dry_friction,
                 self.damping_str: entity.dynamics.damping,
