@@ -6,17 +6,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from itertools import product
 
-from sortedcontainers import SortedSet
-
 from typing_extensions import (
     Any,
     List,
     TypeVar,
     Generic,
     Type,
-    Dict,
     TYPE_CHECKING,
-    Tuple,
 )
 
 from pycram.datastructures.enums import ApproachDirection, VerticalAlignment
@@ -31,7 +27,7 @@ from semantic_digital_twin.world_description.world_entity import (
 from .datastructures.dataclasses import Context
 
 if TYPE_CHECKING:
-    from .plan import Plan, ActionDescriptionNode
+    from .plan import Plan
     from .datastructures.partial_designator import PartialDesignator
 
 logger = logging.getLogger("pycram")
@@ -112,6 +108,7 @@ class ParameterInferrer:
         :param inference_rule: The rule to add
         """
         self.parameter_rules.append(inference_rule)
+        inference_rule.parameter_infeerer = self
 
     def add_domain(self, domain: Domain[Type[T]]):
         """
@@ -164,10 +161,11 @@ class ParameterInferrer:
         :return: Domain for the parameter
         """
         domain = self.get_domain_for_type(parameter_identifier.type_)
+        if domain == [] and parameter_identifier.parameter is not Ellipsis:
+            domain = [parameter_identifier.parameter]
         rules = self.get_rules_for_parameter(parameter_identifier)
         for rule in rules:
             domain = rule.apply(domain, self.plan.context)
-            rule.effect()
         return domain
 
     def sample_value(self, value_type: Type[T]) -> T:
@@ -185,12 +183,18 @@ class InferenceRule(Generic[T], ABC):
     Type for which this rule is defined (??)
     """
 
-    @abstractmethod
-    def apply(self, domain: List[T], context: Context) -> List[T]: ...
+    parameter_infeerer: ParameterInferrer = field(init=False)
 
-    """
-    Applies this rule to the domain
-    """
+    @abstractmethod
+    def _apply(self, domain: List[T], context: Context) -> List[T]: ...
+
+    def apply(self, domain: List[T], context: Context) -> List[T]:
+        """
+        Applies this rule to the domain
+        """
+        domain = self._apply(domain, context)
+        self.effect()
+        return domain
 
     def effect(self): ...
 
