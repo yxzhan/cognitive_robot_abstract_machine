@@ -14,7 +14,7 @@ from sqlalchemy.orm import (
     MappedColumn,
 )
 from typing_extensions import Tuple, List, Set, Optional, Self, ClassVar
-
+from ucimlrepo import fetch_ucirepo
 
 from krrood.ripple_down_rules.datastructures.case import (
     Case,
