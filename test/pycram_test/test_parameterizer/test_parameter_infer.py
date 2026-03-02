@@ -14,6 +14,7 @@ from pycram.parameter_inference import (
     ValueDomainSpecification,
 )
 from pycram.parameter_rules.condition_parameterizer import ConditionParameterizer
+from pycram.parameter_rules.default_rules import ArmsFitGraspDescriptionRule
 from pycram.parameter_rules.default_type_domains import (
     EnumDomainSpecification,
     GraspDomainSpecification,
@@ -25,6 +26,7 @@ from pycram.robot_plans import (
     ParkArmsActionDescription,
     PlaceActionDescription,
 )
+from pycram.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 
@@ -78,3 +80,51 @@ def test_infer_arm_param(immutable_model_world):
 
 def test_result_rule(immutable_model_world):
     world, view, context = immutable_model_world
+
+    pick_action = PickUpActionDescription(
+        world.get_body_by_name("milk.stl"),
+        ...,
+        GraspDescription(
+            ApproachDirection.FRONT,
+            VerticalAlignment.NoAlignment,
+            view.left_arm.manipulator,
+        ),
+    )
+
+    view.root.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        1.8, 2, 0
+    )
+
+    plan = SequentialPlan(context, pick_action)
+
+    plan.parameter_infeerer.add_domains(
+        e_domain := EnumDomainSpecification(Arms),
+        g_domain := GraspDomainSpecification(
+            GraspDescription, view.left_arm.manipulator
+        ),
+        gr_domain := GraspDomainSpecification(
+            GraspDescription, view.right_arm.manipulator
+        ),
+    )
+
+    plan.parameter_infeerer.add_infer_system(ConditionParameterizer())
+
+    desig_domain = plan.parameter_infeerer.plan_domain.designator_domains[pick_action]
+
+    ArmsFitGraspDescriptionRule(desig_domain).apply()
+
+    assert len(desig_domain.rules) == 1
+
+    all_bindings = list(plan.parameter_infeerer.parameterize(pick_action))
+    bindings = all_bindings[0]
+
+    assert len(bindings) == 3
+    assert list(bindings.keys()) == [
+        "object_designator",
+        "arm",
+        "grasp_description",
+    ]
+
+    for binding in all_bindings:
+        manipulator = ViewManager.get_end_effector_view(binding["arm"], context.robot)
+        assert binding["grasp_description"].manipulator == manipulator

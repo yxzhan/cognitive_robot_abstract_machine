@@ -17,8 +17,10 @@ from typing_extensions import (
     Generator,
 )
 
-from krrood.entity_query_language.entity import variable
-from krrood.entity_query_language.symbolic import Variable
+from krrood.entity_query_language.entity import variable, set_of
+from krrood.entity_query_language.entity_result_processors import a
+from krrood.entity_query_language.symbolic import Variable, SymbolicExpression
+from . import designator
 from .datastructures.dataclasses import Context
 
 if TYPE_CHECKING:
@@ -40,10 +42,7 @@ class ParameterInferer:
         Rules: restrict the domain and are defined for certain parameters
     """
 
-    parameter_rules: List[InferenceRule] = field(init=False, default_factory=list)
-    """
-    A set of rules that restrict the domain
-    """
+    inference_rules: List[InferenceRule] = field(init=False, default_factory=list)
 
     inference_systems: List[InferenceSystem] = field(init=False, default_factory=list)
 
@@ -63,8 +62,8 @@ class ParameterInferer:
 
         :param inference_rule: The rule to add
         """
-        self.parameter_rules.append(inference_rule)
-        inference_rule.parameter_infeerer = self
+        inference_rule.apply()
+        self.inference_rules.append(inference_rule)
 
     def add_domain(self, domain: DomainSpecification[Type[T]]):
         """
@@ -86,8 +85,11 @@ class ParameterInferer:
         for domain in domains:
             self.add_domain(domain)
 
-    def parameterize(self, description: PartialDesignator):
-        return self.inference_systems[0].infer_bindings_for_designator(description)
+    def parameterize(self, description: PartialDesignator) -> Generator[Dict[str, Any]]:
+        for bindings in self.inference_systems[0].infer_bindings_for_designator(
+            description
+        ):
+            yield bindings
 
 
 @dataclass
@@ -96,18 +98,21 @@ class InferenceRule(Generic[T], ABC):
     Rule that restricts a domain
     """
 
-    parameter_infeerer: ParameterInferer = field(init=False)
+    designator_domain: DesignatorDomain
 
     @abstractmethod
-    def _apply(self, domain: List[T], context: Context) -> List[T]: ...
+    def rule(
+        self, designator_domain: DesignatorDomain, context: Context
+    ) -> SymbolicExpression: ...
 
-    def apply(self, domain: List[T], context: Context) -> List[T]:
+    def apply(self):
         """
         Applies this rule to the domain
         """
-        domain = self._apply(domain, context)
+        self.designator_domain.rules.append(
+            self.rule(self.designator_domain, self.designator_domain.plan.context)
+        )
         self.effect()
-        return domain
 
     def effect(self): ...
 
@@ -218,6 +223,8 @@ class DesignatorDomain:
 
     plan: Plan = None
 
+    rules: List[SymbolicExpression] = field(default_factory=list, init=False)
+
     def domain(self) -> List:
         d = []
         for designator_domain in self.parameter_domains.values():
@@ -232,6 +239,9 @@ class DesignatorDomain:
             k: variable(v.domain_type, v.domain(self.plan.context))
             for k, v in self.parameter_domains.items()
         }
+
+    def __hash__(self):
+        return id(self)
 
 
 @dataclass
@@ -266,14 +276,30 @@ class InferenceSystem(ABC):
     plan_domain: PlanDomain = field(init=False)
 
     @abstractmethod
-    def infer_bindings_for_designator(
+    def generate_bindings(
         self, designator: PartialDesignator
     ) -> Generator[Dict[str, Any]]:
         pass
+
+    def apply_rules(self, bindings, designator) -> Dict[str, Any]:
+        vars = {k: variable(type(v), domain=[v]) for k, v in bindings.items()}
+        query = a(
+            set_of(*vars.values()).where(
+                *self.plan_domain.designator_domains[designator].rules
+            )
+        )
+        return list(query.evaluate())[0].data
+
+    def infer_bindings_for_designator(self, designator: PartialDesignator):
+        for bindings in self.generate_bindings(designator):
+            yield bindings
+            # ruled = self.apply_rules(bindings, designator)
+            # if ruled:
+            #     yield ruled
 
     def assign_parameterizer(self, parameterizer: ParameterInferer):
         self.plan_domain = parameterizer.plan_domain
         self.plan = parameterizer.plan
 
     def get_variables(self, description: PartialDesignator):
-        return self.plan_domain[description].create_variables()
+        return self.plan_domain.designator_domains[description].create_variables()
