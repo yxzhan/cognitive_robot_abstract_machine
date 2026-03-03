@@ -2,7 +2,6 @@ import logging
 import inspect
 import os
 import shutil
-import time
 import trimesh
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
