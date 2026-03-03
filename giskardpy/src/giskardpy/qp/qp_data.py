@@ -84,6 +84,15 @@ class MyConditioning:
 
 
 @dataclass
+class HessianOneConditioning(Conditioning):
+    @classmethod
+    def from_qp_data(cls, qp_data: QPData) -> Self:
+        diagonal = 1 / np.sqrt(qp_data.quadratic_weights)
+        diagonal[qp_data.quadratic_weights == 0] = 0
+        return cls(C=sp.diags(diagonal))
+
+
+@dataclass
 class Relaxo:
     def partially_relaxed(self, relaxed_solution: np.ndarray) -> QPData:
         relaxed_qp_data = QPData(
@@ -262,89 +271,35 @@ class QPData:
     def dense_neq_matrix(self) -> np.ndarray:
         return self.neq_matrix.toarray()
 
-    def to_print_testcase(self):
-        testcase = (
-            f"linear_weights = np.array({self.linear_weights.tolist()}, dtype=float)\n"
-            f"quadratic_weights = np.array({self.quadratic_weights.tolist()}, dtype=float)\n"
-            f"box_lower_constraints = np.array({self.box_lower_constraints.tolist()}, dtype=float)\n"
-            f"box_upper_constraints = np.array({self.box_upper_constraints.tolist()}, dtype=float)\n"
-            f"eq_bounds = np.array({self.eq_bounds.tolist()}, dtype=float)\n"
-            f"neq_lower_bounds = np.array({self.neq_lower_bounds.tolist()}, dtype=float)\n"
-            f"neq_upper_bounds = np.array({self.neq_upper_bounds.tolist()}, dtype=float)\n"
-            f"eq_matrix_data = np.array({self.eq_matrix.data.tolist()}, dtype=float)\n"
-            f"eq_matrix_indices = np.array({self.eq_matrix.indices.tolist()}, dtype=int)\n"
-            f"eq_matrix_indptr = np.array({self.eq_matrix.indptr.tolist()}, dtype=int)\n"
-            f"eq_matrix_shape = {self.eq_matrix.shape}\n"
-            f"eq_matrix = csc_matrix((eq_matrix_data, eq_matrix_indices, eq_matrix_indptr), shape=eq_matrix_shape).toarray()\n"
-            f"neq_matrix_data = np.array({self.neq_matrix.data.tolist()}, dtype=float)\n"
-            f"neq_matrix_indices = np.array({self.neq_matrix.indices.tolist()}, dtype=int)\n"
-            f"neq_matrix_indptr = np.array({self.neq_matrix.indptr.tolist()}, dtype=int)\n"
-            f"neq_matrix_shape = {self.neq_matrix.shape}\n"
-            f"neq_matrix = csc_matrix((neq_matrix_data, neq_matrix_indices, neq_matrix_indptr), shape=neq_matrix_shape).toarray()\n"
-            "x = solve_and_verify_qp_solution(quadratic_weights, linear_weights, box_lower_constraints, box_upper_constraints, eq_matrix, eq_bounds, neq_matrix, neq_lower_bounds, neq_upper_bounds, benchmark=False)"
-        )
-        print(testcase)
-
-    # @property
-    # def num_non_constraints(self) -> int:
-    #     return (
-    #         len(self.quadratic_weights)
-    #         - self.num_eq_constraints
-    #         - self.num_neq_constraints
-    #     )
-
     def pretty_print_problem(self):
-        print("QP data")
-        large = int(1e10)
-        if self.quadratic_weights is not None:
-            print(
-                f"H (quadratic_weights): \n{np.array2string(self.quadratic_weights, max_line_width=large)}"
-            )
-        if self.linear_weights is not None:
-            print(
-                f"g (linear_weights): \n{np.array2string(self.linear_weights, max_line_width=large)})"
-            )
+        return (
+            f"QPData(\n"
+            f"    quadratic_weights={self._np_array_to_str(self.quadratic_weights)},\n"
+            f"    linear_weights={self._np_array_to_str(self.linear_weights)},\n"
+            f"    box_lower_constraints={self._np_array_to_str(self.box_lower_constraints)},\n"
+            f"    box_upper_constraints={self._np_array_to_str(self.box_upper_constraints)},\n"
+            f"    eq_matrix={self._sparse_matrix_to_str(self.eq_matrix)},\n"
+            f"    eq_bounds={self._np_array_to_str(self.eq_bounds)},\n"
+            f"    neq_matrix={self._sparse_matrix_to_str(self.neq_matrix)},\n"
+            f"    neq_lower_bounds={self._np_array_to_str(self.neq_lower_bounds)},\n"
+            f"    neq_upper_bounds={self._np_array_to_str(self.neq_upper_bounds)},\n"
+            ")"
+        )
 
-        if self.box_lower_constraints is not None:
-            print(
-                f"lb (box_lower_constraints): \n{np.array2string(self.box_lower_constraints, max_line_width=large)}"
-            )
-        if self.box_upper_constraints is not None:
-            print(
-                f"ub (box_upper_constraints): \n{np.array2string(self.box_upper_constraints, max_line_width=large)}"
-            )
+    def _np_array_to_str(self, array: np.ndarray, dtype: str = "float") -> str:
+        return f"np.array({array.tolist()}, dtype={dtype})".replace("inf", "np.inf")
 
-        if self.eq_matrix is not None:
-            try:
-                print(
-                    f"E (eq_matrix): \n{np.array2string(self.eq_matrix.toarray(), max_line_width=large)}"
-                )
-            except:
-                print(
-                    f"E (eq_matrix): \n{np.array2string(self.eq_matrix, max_line_width=large)}"
-                )
-        if self.eq_bounds is not None:
-            print(
-                f"bE (eq_bounds): \n{np.array2string(self.eq_bounds, max_line_width=large)}"
-            )
-
-        if self.neq_matrix is not None:
-            try:
-                print(
-                    f"A (neq_matrix): \n{np.array2string(self.neq_matrix.toarray(), max_line_width=large)}"
-                )
-            except:
-                print(
-                    f"A (neq_matrix): \n{np.array2string(self.neq_matrix, max_line_width=large)}"
-                )
-        if self.neq_lower_bounds is not None:
-            print(
-                f"lbA (neq_lower_bounds): \n{np.array2string(self.neq_lower_bounds, max_line_width=large)}"
-            )
-        if self.neq_upper_bounds is not None:
-            print(
-                f"ubA (neq_upper_bounds): \n{np.array2string(self.neq_upper_bounds, max_line_width=large)}"
-            )
+    def _sparse_matrix_to_str(self, matrix: sp.csc_matrix, spaces: int = 4) -> str:
+        return (
+            f"sp.csc_matrix(\n"
+            f"{' '*spaces}(\n"
+            f"{' '*spaces}    {self._np_array_to_str(matrix.data)},\n"
+            f"{' '*spaces}    {self._np_array_to_str(matrix.indices, dtype='int')},\n"
+            f"{' '*spaces}    {self._np_array_to_str(matrix.indptr, dtype='int')},\n"
+            f"{' '*spaces}),\n"
+            f"{' '*spaces}shape={matrix.shape},\n"
+            f"{' '*spaces})"
+        )
 
     def analyze_well_posedness(self):
         """

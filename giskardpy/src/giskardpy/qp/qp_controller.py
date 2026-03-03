@@ -467,6 +467,7 @@ class QPController:
             try:
                 self.xdot_full = self.qp_solver.solver_call(filtered_qp_data)
             except InfeasibleException as e:
+                print(filtered_qp_data.pretty_print_problem())
                 self.xdot_full = self.qp_solver.solver_call(filtered_qp_data)
 
                 self.config.retries_with_relaxed_constraints -= 1

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, List
 
 from giskardpy.qp.adapters.explicit_adapter import GiskardToExplicitQPAdapter
 from giskardpy.qp.adapters.qp_adapter import QPData
+from typing_extensions import ClassVar
 
 if TYPE_CHECKING:
     pass
@@ -29,6 +31,7 @@ class QPSWIFTExitFlags(IntEnum):
     ERROR = 3  # Unknown Problem in Solver
 
 
+@dataclass
 class QPSolverQPSwift(QPSolver):
     """
     min_x 0.5 x^T P x + c^T x
@@ -36,8 +39,11 @@ class QPSolverQPSwift(QPSolver):
           Gx <= h
     """
 
-    solver_id = SupportedQPSolver.qpSWIFT
-    required_adapter_type = GiskardToExplicitQPAdapter
+    solver_id: ClassVar[SupportedQPSolver] = SupportedQPSolver.qpSWIFT
+    required_adapter_type: ClassVar[type[GiskardToExplicitQPAdapter]] = (
+        GiskardToExplicitQPAdapter
+    )
+    ignore_fail: bool = False
 
     opts = {
         "OUTPUT": 1,  # 0 = sol; 1 = sol + basicInfo; 2 = sol + basicInfo + advInfo
@@ -62,13 +68,14 @@ class QPSolverQPSwift(QPSolver):
             options=self.opts,
         )
         exit_flag = result.exit_flag
-        if exit_flag != 0:
-            print(":((")
+        if not self.ignore_fail:
+            if exit_flag != 0:
+                # print(":((")
 
-            # error_code = QPSWIFTExitFlags(exit_flag)
-            # if error_code == QPSWIFTExitFlags.MAX_ITER_REACHED:
-            #     raise InfeasibleException(f"Failed to solve qp: {str(error_code)}")
-            # raise QPSolverException(f"Failed to solve qp: {str(error_code)}")
+                error_code = QPSWIFTExitFlags(exit_flag)
+                if error_code == QPSWIFTExitFlags.MAX_ITER_REACHED:
+                    raise InfeasibleException(f"Failed to solve qp: {str(error_code)}")
+                raise QPSolverException(f"Failed to solve qp: {str(error_code)}")
         return result.x
 
     solver_call = solver_call_explicit_interface
