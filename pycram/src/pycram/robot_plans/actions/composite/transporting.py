@@ -6,10 +6,12 @@ from typing import List
 
 import numpy as np
 
+from krrood.entity_query_language.entity import and_
+from krrood.entity_query_language.symbolic import SymbolicExpression
 from semantic_digital_twin.reasoning.predicates import InsideOf
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Drawer
 from semantic_digital_twin.world_description.world_entity import Body
-from typing_extensions import Union, Optional, Type, Any, Iterable
+from typing_extensions import Union, Optional, Type, Any, Iterable, Dict
 
 from .facing import FaceAtActionDescription
 from ..core import (
@@ -20,6 +22,7 @@ from ..core import (
     OpenActionDescription,
 )
 from ....config.action_conf import ActionConfig
+from ....datastructures.dataclasses import Context
 from ....datastructures.enums import Arms, Grasp, VerticalAlignment
 from ....datastructures.grasp import GraspDescription
 from ....datastructures.partial_designator import PartialDesignator
@@ -32,7 +35,9 @@ from ....designators.location_designator import (
 from ....designators.object_designator import BelieveObject
 from ....failures import ObjectUnfetchable, ConfigurationNotReached
 from ....language import SequentialPlan
+from ....querying.predicates import GripperIsFree
 from ....robot_plans.actions.base import ActionDescription, DescriptionType
+from ....view_manager import ViewManager
 
 
 @dataclass
@@ -148,6 +153,23 @@ class TransportAction(ActionDescription):
     ):
         # The validation of each core action is done in the action itself, so no more validation needed here.
         pass
+
+    @staticmethod
+    def pre_condition(
+        variables: Dict, context: Context, kwargs: Dict[str, Any]
+    ) -> SymbolicExpression:
+        manipulator = ViewManager.get_end_effector_view(variables["arm"], context.robot)
+        return and_(GripperIsFree(manipulator))
+
+    @staticmethod
+    def post_condition(
+        variables, context: Context, kwargs: Dict[str, Any]
+    ) -> SymbolicExpression | bool:
+        return np.allclose(
+            kwargs["object_designator"].global_pose,
+            kwargs["target_location"].to_spatial_type(),
+            atol=1e-2,
+        )
 
     @classmethod
     def description(

@@ -3,10 +3,9 @@ from __future__ import annotations
 import logging
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import timedelta
 
 import numpy as np
-from typing_extensions import Union, Optional, Any, Iterable, Dict
+from typing_extensions import Any, Dict
 
 from krrood.entity_query_language.entity import and_, not_, or_
 from krrood.entity_query_language.symbolic import SymbolicExpression
@@ -14,7 +13,6 @@ from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
 from semantic_digital_twin.world_description.world_entity import Body
 from ...motions.gripper import MoveGripperMotion, MoveTCPMotion
-from ....config.action_conf import ActionConfig
 from ....datastructures.dataclasses import Context
 from ....datastructures.enums import (
     Arms,
@@ -23,7 +21,6 @@ from ....datastructures.enums import (
 from ....datastructures.grasp import GraspDescription
 from ....datastructures.partial_designator import PartialDesignator
 from ....datastructures.pose import PoseStamped
-from ....failures import ObjectNotGraspedError
 from ....language import SequentialPlan
 from ....pose_validator import reachability_validator
 from ....querying.predicates import GripperIsFree

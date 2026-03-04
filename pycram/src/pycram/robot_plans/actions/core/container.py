@@ -102,15 +102,19 @@ class OpenAction(ActionDescription):
         variables, context: Context, kwargs: Dict[str, Any]
     ) -> SymbolicExpression | bool:
         manipulator = ViewManager.get_end_effector_view(kwargs["arm"], context.robot)
-        return is_body_in_gripper(
-            kwargs["object_designator"], manipulator
-        ) > 0.9 or np.allclose(
-            kwargs["object_designator"].global_pose.to_position(),
-            ViewManager.get_end_effector_view(
-                kwargs["arm"], context.robot
-            ).tool_frame.global_pose.to_position(),
-            atol=3e-2,
-        )
+        parent_connection = kwargs[
+            "object_designator"
+        ].get_first_parent_connection_of_type(ActiveConnection1DOF)
+        return (
+            is_body_in_gripper(kwargs["object_designator"], manipulator) > 0.9
+            or np.allclose(
+                kwargs["object_designator"].global_pose.to_position(),
+                ViewManager.get_end_effector_view(
+                    kwargs["arm"], context.robot
+                ).tool_frame.global_pose.to_position(),
+                atol=3e-2,
+            )
+        ) and bool(parent_connection.position > 0.3)
 
     @classmethod
     def description(

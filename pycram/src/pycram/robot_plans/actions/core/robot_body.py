@@ -51,7 +51,7 @@ class MoveTorsoAction(ActionDescription):
     @staticmethod
     def post_condition(
         variables, context: Context, kwargs: Dict[str, Any]
-    ) -> SymbolicExpression:
+    ) -> SymbolicExpression | bool:
         joint_state = context.robot.torso.get_joint_state_by_type(kwargs["torso_state"])
         return joint_state.is_achieved()
 
@@ -217,26 +217,6 @@ class CarryAction(ActionDescription):
         v.frame_id = link
         v.header.stamp = datetime.datetime.now()
         return v
-
-    def validate(
-        self,
-        result: Optional[Any] = None,
-        max_wait_time: timedelta = timedelta(seconds=2),
-    ):
-        """
-        Create a goal validator for the joint positions and wait until the goal is achieved or the timeout is reached.
-        """
-        joint_poses = self.get_joint_poses()
-        validator = create_multiple_joint_goal_validator(
-            World.current_world.robot, joint_poses
-        )
-        validator.wait_until_goal_is_achieved(
-            max_wait_time=max_wait_time, time_per_read=timedelta(milliseconds=20)
-        )
-        if not validator.goal_achieved:
-            raise ConfigurationNotReached(
-                validator, configuration_type=StaticJointState.Park
-            )
 
     @classmethod
     def description(
