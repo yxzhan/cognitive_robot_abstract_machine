@@ -45,7 +45,6 @@ class QPSolverQPalm(QPSolver[QPDataTwoSidedInequality]):
         data.A = qp_data.neq_matrix
         data.bmin = qp_data.neq_lower_bounds
         data.bmax = qp_data.neq_upper_bounds
-
         solver = qpalm.Solver(data, self.settings)
         solver.solve()
         if solver.info.status_val != QPALMInfo.SOLVED:

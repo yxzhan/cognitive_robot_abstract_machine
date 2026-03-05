@@ -482,20 +482,23 @@ class QPDataTwoSidedInequality(QPData):
     def box_upper_constraints(self) -> np.ndarray:
         return self.neq_upper_bounds[: self.num_box_constraints]
 
+    @property
+    def bE_start(self) -> int:
+        return self.num_box_constraints
+
+    @property
+    def bA_start(self) -> int:
+        return self.neq_lower_bounds.shape[0] - self.num_neq_slack_variables
+
     def apply_filters(self) -> Self:
         b_bE_bA_filter = np.ones(
             self.neq_lower_bounds.shape[0],
             dtype=bool,
         )
         b_zero_inf_filter_view = b_bE_bA_filter[: self.num_box_constraints]
-        bE_filter_view = b_bE_bA_filter[
-            self.num_box_constraints : self.num_box_constraints
-            + self.num_eq_slack_variables
-        ]
-        bA_filter_view = b_bE_bA_filter[
-            self.num_box_constraints + self.num_eq_slack_variables :
-        ]
-        bE_bA_filter = b_bE_bA_filter[self.num_box_constraints :]
+        bE_filter_view = b_bE_bA_filter[self.bE_start : self.bA_start]
+        bA_filter_view = b_bE_bA_filter[self.bA_start :]
+        bE_bA_filter = b_bE_bA_filter[self.bE_start :]
 
         zero_quadratic_weight_filter = self.quadratic_weights != 0
         zero_quadratic_weight_filter[: -self.num_slack_variables] = True
@@ -513,14 +516,14 @@ class QPDataTwoSidedInequality(QPData):
             self.box_upper_constraints
         )
         b_zero_inf_filter_view[::] = zero_quadratic_weight_filter & b_finite_filter
-        Ai_inf_filter = b_finite_filter[zero_quadratic_weight_filter]
+        Ai_inf_filter = b_finite_filter  # [zero_quadratic_weight_filter]
 
         neq_matrix = self.neq_matrix[:, zero_quadratic_weight_filter][bE_bA_filter, :]
 
         self._nAi_Ai_cache = {}
         box_matrix = self._direct_limit_model(
             self.quadratic_weights.shape[0], Ai_inf_filter, two_sided=True
-        )
+        )[:, zero_quadratic_weight_filter][zero_quadratic_weight_filter, :]
 
         return QPDataTwoSidedInequality(
             quadratic_weights=self.quadratic_weights[zero_quadratic_weight_filter],

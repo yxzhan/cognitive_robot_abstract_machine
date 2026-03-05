@@ -1175,6 +1175,39 @@ class TestJointTasks:
         assert np.isclose(head_pan_joint.position, 0.042, atol=1e-3)
         assert np.isclose(head_tilt_joint.position, -0.37, atol=1e-2)
 
+    def test_joint_sequence(self, pr2_world_state_reset):
+        msc = MotionStatechart()
+        msc.add_node(
+            sequence := Sequence(
+                [
+                    JointPositionList(
+                        goal_state=JointState.from_str_dict(
+                            {"torso_lift_joint": 0.1}, world=pr2_world_state_reset
+                        )
+                    ),
+                    JointPositionList(
+                        goal_state=JointState.from_str_dict(
+                            {"torso_lift_joint": 0.2}, world=pr2_world_state_reset
+                        )
+                    ),
+                ]
+            )
+        )
+        msc.add_node(EndMotion.when_true(sequence))
+
+        kin_sim = Executor(
+            MotionStatechartContext(
+                world=pr2_world_state_reset,
+                qp_controller_config=QPControllerConfig(
+                    target_frequency=20,
+                    prediction_horizon=7,
+                    qp_solver_class=QPSolverQPalm,
+                ),
+            )
+        )
+        kin_sim.compile(motion_statechart=msc)
+        kin_sim.tick_until_end()
+
 
 def test_long_goal(pr2_world_state_reset: World):
     msc = MotionStatechart()
