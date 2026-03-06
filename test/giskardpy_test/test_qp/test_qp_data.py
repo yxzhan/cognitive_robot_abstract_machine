@@ -3,9 +3,9 @@ import pytest
 import scipy.sparse as sp
 from giskardpy.qp.qp_data import (
     QPData,
-    Conditioning,
-    HessianOneConditioning,
-    MyConditioning,
+    ConditioningStrategy,
+    HessianOneConditioningStrategy,
+    MyConditioningStrategy,
 )
 from giskardpy.qp.solvers.qp_solver_gurobi import QPSolverGurobi
 from giskardpy.qp.solvers.qp_solver_qpSWIFT import QPSolverQPSwift
@@ -7854,7 +7854,7 @@ def test_qp_data_larger_qp(larger_qp):
 
 def test_C_conditioning(simple_inequality_qp):
     qp_data, expected = simple_inequality_qp
-    conditioning = Conditioning(C=sp.diags([69.0, 23.0]))
+    conditioning = ConditioningStrategy(C=sp.diags([69.0, 23.0]))
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverQPSwift().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)
@@ -7863,7 +7863,7 @@ def test_C_conditioning(simple_inequality_qp):
 
 def test_R_conditioning(simple_equality_qp):
     qp_data, expected = simple_equality_qp
-    conditioning = Conditioning(R_eq=sp.diags([23.0]))
+    conditioning = ConditioningStrategy(R_eq=sp.diags([23.0]))
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverQPSwift().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)
@@ -7872,7 +7872,7 @@ def test_R_conditioning(simple_equality_qp):
 
 def test_R_neq_conditioning(simple_inequality_qp):
     qp_data, expected = simple_inequality_qp
-    conditioning = Conditioning(R_neq=sp.diags([10.0]))
+    conditioning = ConditioningStrategy(R_neq=sp.diags([10.0]))
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverQPSwift().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)
@@ -7881,7 +7881,7 @@ def test_R_neq_conditioning(simple_inequality_qp):
 
 def test_combined_conditioning(simple_inequality_qp):
     qp_data, expected = simple_inequality_qp
-    conditioning = Conditioning(C=sp.diags([2.0, 0.5]), R_neq=sp.diags([10.0]))
+    conditioning = ConditioningStrategy(C=sp.diags([2.0, 0.5]), R_neq=sp.diags([10.0]))
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverQPSwift().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)
@@ -7890,7 +7890,7 @@ def test_combined_conditioning(simple_inequality_qp):
 
 def test_identity_conditioning(simple_inequality_qp):
     qp_data, expected = simple_inequality_qp
-    conditioning = Conditioning(C=sp.diags([1.0, 1.0]), R_neq=sp.diags([1.0]))
+    conditioning = ConditioningStrategy(C=sp.diags([1.0, 1.0]), R_neq=sp.diags([1.0]))
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverQPSwift().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)
@@ -7899,7 +7899,7 @@ def test_identity_conditioning(simple_inequality_qp):
 
 def test_no_conditioning(simple_inequality_qp):
     qp_data, expected = simple_inequality_qp
-    conditioning = Conditioning()
+    conditioning = ConditioningStrategy()
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverQPSwift().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)
@@ -7909,7 +7909,7 @@ def test_no_conditioning(simple_inequality_qp):
 def test_sadness_qp_gurobi(sadness_qp17):
     qp_data = sadness_qp17
     normal_result = QPSolverGurobi().solver_call(qp_data)
-    conditioning = HessianOneConditioning()
+    conditioning = HessianOneConditioningStrategy()
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverGurobi().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)
@@ -7919,7 +7919,7 @@ def test_sadness_qp_gurobi(sadness_qp17):
 def test_sadness_qp_gurobi_my_conditioning(sadness_qp_raw):
     qp_data = sadness_qp_raw
     normal_result = QPSolverGurobi().solver_call(qp_data)
-    conditioning = MyConditioning()
+    conditioning = MyConditioningStrategy()
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverGurobi().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)
@@ -7929,7 +7929,7 @@ def test_sadness_qp_gurobi_my_conditioning(sadness_qp_raw):
 def test_sadness_qp_qpswift_my_conditioning(sadness_qp_raw):
     qp_data = sadness_qp_raw
     normal_result = QPSolverQPSwift(ignore_fail=True).solver_call(qp_data)
-    conditioning = MyConditioning()
+    conditioning = MyConditioningStrategy()
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverQPSwift().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)
@@ -7939,7 +7939,7 @@ def test_sadness_qp_qpswift_my_conditioning(sadness_qp_raw):
 def test_sadness_qp_qpswift(sadness_qp21):
     qp_data = sadness_qp21
     # normal_result = QPSolverQPSwift(ignore_fail=True).solver_call(qp_data)
-    conditioning = HessianOneConditioning()
+    conditioning = HessianOneConditioningStrategy()
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverQPSwift().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)
@@ -7949,7 +7949,7 @@ def test_sadness_qp_qpswift(sadness_qp21):
 def test_hassian_one(larger_qp):
     qp_data, expected = larger_qp
     normal_result = QPSolverQPSwift().solver_call(qp_data)
-    conditioning = HessianOneConditioning.from_qp_data(qp_data)
+    conditioning = HessianOneConditioningStrategy.from_qp_data(qp_data)
     conditioned_qp_data = conditioning.apply(qp_data)
     conditioned_result = QPSolverQPSwift().solver_call(conditioned_qp_data)
     result = conditioning.unapply(conditioned_result)

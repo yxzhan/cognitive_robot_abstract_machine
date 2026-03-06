@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class Conditioning:
+class ConditioningStrategy:
     """
     Change the conditioning of a QP problem.
     Inherit from this to implement different strategies
@@ -45,7 +45,7 @@ class Conditioning:
 
 
 @dataclass
-class HessianOneConditioning(Conditioning):
+class HessianOneConditioningStrategy(ConditioningStrategy):
     def _apply_column_scaling(self, qp_data: QPData) -> QPData:
         diagonal = 1 / np.sqrt(qp_data.quadratic_weights)
         diagonal[qp_data.quadratic_weights == 0] = 1.0
@@ -60,7 +60,7 @@ class HessianOneConditioning(Conditioning):
 
 
 @dataclass
-class MyConditioning(Conditioning):
+class MyConditioningStrategy(ConditioningStrategy):
     def update(self, qp_data: QPData):
         asdf = np.abs(qp_data.eq_matrix.toarray()).max(axis=0)
         asdf[qp_data.quadratic_weights != 0] = 1
@@ -120,7 +120,7 @@ class QPData:
 
     def apply_filters(self) -> Self: ...
 
-    def apply_conditioning(self, conditioning: Conditioning) -> Self:
+    def apply_conditioning(self, conditioning: ConditioningStrategy) -> Self:
         """
         Apply the conditioning to the QP problem data.
         """
@@ -190,7 +190,7 @@ class QPDataExplicit(QPData):
         )
 
     def _apply_column_scaling(
-        self, conditioning: Conditioning, qp_data: QPData
+        self, conditioning: ConditioningStrategy, qp_data: QPData
     ) -> QPData:
         if conditioning.C is not None:
             qp_data.quadratic_weights = (
@@ -214,7 +214,7 @@ class QPDataExplicit(QPData):
         return qp_data
 
     def _apply_row_scaling_eq(
-        self, conditioning: Conditioning, qp_data: QPData
+        self, conditioning: ConditioningStrategy, qp_data: QPData
     ) -> QPData:
         if conditioning.R_eq is not None:
             qp_data.eq_matrix = conditioning.R_eq @ qp_data.eq_matrix
@@ -222,7 +222,7 @@ class QPDataExplicit(QPData):
         return qp_data
 
     def _apply_row_scaling_neq(
-        self, conditioning: Conditioning, qp_data: QPData
+        self, conditioning: ConditioningStrategy, qp_data: QPData
     ) -> QPData:
         if conditioning.R_neq is not None:
             qp_data.neq_matrix = conditioning.R_neq @ qp_data.neq_matrix
@@ -589,7 +589,7 @@ class QPDataTwoSidedInequality(QPData):
             return sp.csc_matrix((data, row_indices, col_indices))
 
     def _apply_column_scaling(
-        self, conditioning: Conditioning, qp_data: QPData
+        self, conditioning: ConditioningStrategy, qp_data: QPData
     ) -> QPData:
         if conditioning.C is not None:
             qp_data.quadratic_weights = (
@@ -613,7 +613,7 @@ class QPDataTwoSidedInequality(QPData):
         return qp_data
 
     def _apply_row_scaling_eq(
-        self, conditioning: Conditioning, qp_data: QPData
+        self, conditioning: ConditioningStrategy, qp_data: QPData
     ) -> QPData:
         if conditioning.R_eq is not None:
             qp_data.eq_matrix = conditioning.R_eq @ qp_data.eq_matrix
@@ -621,7 +621,7 @@ class QPDataTwoSidedInequality(QPData):
         return qp_data
 
     def _apply_row_scaling_neq(
-        self, conditioning: Conditioning, qp_data: QPData
+        self, conditioning: ConditioningStrategy, qp_data: QPData
     ) -> QPData:
         if conditioning.R_neq is not None:
             qp_data.neq_matrix = conditioning.R_neq @ qp_data.neq_matrix

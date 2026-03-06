@@ -22,9 +22,9 @@ from giskardpy.qp.qp_data import (
     QPDataExplicit,
     QPData,
     QPDataFactory,
-    MyConditioning,
-    Conditioning,
-    HessianOneConditioning,
+    MyConditioningStrategy,
+    ConditioningStrategy,
+    HessianOneConditioningStrategy,
 )
 from giskardpy.qp.solvers.qp_solver import QPSolver
 from giskardpy.utils.utils import create_path
@@ -477,7 +477,7 @@ class QPController:
         # 2. apply filter
         qp_data_filtered = qp_data_raw.apply_filters()
         # 3. apply conditioning
-        conditioning = Conditioning()
+        conditioning = ConditioningStrategy()
         conditioning.update(qp_data_filtered)
         qp_data_filtered = qp_data_filtered.apply_conditioning(conditioning)
         # 4. solve qp
@@ -500,7 +500,7 @@ class QPController:
         )
         filtered_qp_data = zero_weight_filter.apply_filters(qp_data_raw)
         # conditioner = HessianOneConditioning()
-        conditioner = Conditioning()
+        conditioner = ConditioningStrategy()
         filtered_qp_data_conditioned = conditioner.apply(filtered_qp_data)
         try:
             try:

@@ -130,6 +130,13 @@ class QPControllerConfig:
     Reference to the resolved QP solver class.
     """
 
+    conditioning_strategy: ConditioningStrategy = field(
+        default=ConditioningStrategy.HessianOne
+    )
+    """
+    Reference to the resolved QP solver class.
+    """
+
     def __post_init__(self):
         if self.target_frequency < 20:
             logging.warning(

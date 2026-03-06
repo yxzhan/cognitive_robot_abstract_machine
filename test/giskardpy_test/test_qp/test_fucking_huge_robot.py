@@ -1,5 +1,3 @@
-from giskardpy.qp.solvers.qp_solver_ids import SupportedQPSolver
-
 from conftest import robot_factory
 from giskardpy.executor import Executor, SimulationPacer
 from giskardpy.motion_statechart.context import MotionStatechartContext
@@ -10,7 +8,6 @@ from giskardpy.motion_statechart.monitors.overwrite_state_monitors import (
 )
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
-    CartesianPose,
     CartesianPosition,
 )
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
@@ -19,7 +16,7 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
 from semantic_digital_twin.datastructures.joint_state import JointState
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Point3
+from semantic_digital_twin.spatial_types import Point3
 
 
 def test_joint_goal(fucking_huge_robot, rclpy_node):
@@ -83,17 +80,7 @@ def execute(link_length: float, vel_limit: float, rclpy_node):
                     tip_link=eef,
                     goal_point=Point3(y=-link_length, reference_frame=eef),
                     reference_velocity=0.2 * link_length,
-                    # reference_angular_velocity=0.2 * 1000,
                 ),
-                # CartesianPose(
-                #     root_link=fucking_huge_robot.root,
-                #     tip_link=eef,
-                #     goal_pose=HomogeneousTransformationMatrix.from_xyz_rpy(
-                #         y=-link_length, reference_frame=eef
-                #     ),
-                #     reference_linear_velocity=0.2 * link_length,
-                #     # reference_angular_velocity=0.2 * 1000,
-                # ),
             ]
         )
     )
@@ -112,18 +99,8 @@ def execute(link_length: float, vel_limit: float, rclpy_node):
     )
     kin_sim.compile(motion_statechart=msc)
 
-    try:
-        kin_sim.tick_until_end(10_000)
-    finally:
-        print(f"failed at {kin_sim.control_cycles}")
-        print(f"failed at {kin_sim.control_cycles}")
-        print(f"failed at {kin_sim.control_cycles}")
-        print(f"failed at {kin_sim.control_cycles}")
+    kin_sim.tick_until_end(10_000)
 
 
 def test_cart_goal(rclpy_node):
     execute(1000.0, 0.1, rclpy_node)
-
-
-def test_cart_goal3(rclpy_node):
-    execute(0.1, 0.1, rclpy_node)
