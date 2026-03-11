@@ -158,6 +158,31 @@ from semantic_digital_twin.world_description.world_state_trajectory_plotter impo
 )
 
 
+@pytest.fixture()
+def better_pr2_pose():
+    return {
+        "r_shoulder_pan_joint": -1.7125,
+        "r_shoulder_lift_joint": -0.25672,
+        "r_upper_arm_roll_joint": -1.46335,
+        "r_elbow_flex_joint": -2.12,
+        "r_forearm_roll_joint": 1.76632,
+        "r_wrist_flex_joint": -0.10001,
+        "r_wrist_roll_joint": 0.05106,
+        "l_shoulder_pan_joint": 1.9652,
+        "l_shoulder_lift_joint": -0.26499,
+        "l_upper_arm_roll_joint": 1.3837,
+        "l_elbow_flex_joint": -2.12,
+        "l_forearm_roll_joint": 16.99,
+        "l_wrist_flex_joint": -0.10001,
+        "l_wrist_roll_joint": 0,
+        "torso_lift_joint": 0.2,
+        "l_gripper_l_finger_joint": 0.55,
+        "r_gripper_l_finger_joint": 0.55,
+        "head_pan_joint": 0,
+        "head_tilt_joint": 0,
+    }
+
+
 @pytest.fixture(scope="function")
 def pr2_with_box(pr2_world_copy) -> World:
     with pr2_world_copy.modify_world():
@@ -1266,7 +1291,7 @@ class TestCartesianPositionTrajectory:
         For each executed point, the minimum Euclidean distance to the reference path is
         computed. Aggregate statistics and pass/fail against `tolerance` are returned.
 
-        :param positions: Reference path as `Point3` iterable or an array of shape (N, 3).
+        :param positions: Reference path as `Point3` iterable or an array of shape (N, 3). All points are with respect to root_link
         :param world_state_trajectory: Recorded joint-space trajectory with access to the world.
         :param root_link: Root kinematic frame for forward kinematics.
         :param tip_link: Tip kinematic frame for forward kinematics.
@@ -1337,6 +1362,67 @@ class TestCartesianPositionTrajectory:
         kin_sim.tick_until_end()
         self.compare_trajectories(
             points,
+            kin_sim.trajectory_plotter.world_state_trajectory,
+            cart_traj.root_link,
+            cart_traj.tip_link,
+        )
+
+    def test_cartesian_position_trajectory_spiral_pr2(
+        self, pr2_world_state_reset: World, better_pr2_pose, rclpy_node
+    ):
+        VizMarkerPublisher(
+            _world=pr2_world_state_reset, node=rclpy_node
+        ).with_tf_publisher()
+        root = pr2_world_state_reset.get_kinematic_structure_entity_by_name(
+            "base_footprint"
+        )
+        tip = pr2_world_state_reset.get_kinematic_structure_entity_by_name(
+            "r_gripper_tool_frame"
+        )
+
+        SetSeedConfiguration(
+            seed_configuration=JointState.from_str_dict(
+                better_pr2_pose, world=pr2_world_state_reset
+            )
+        ).on_start(MotionStatechartContext(world=pr2_world_state_reset))
+
+        points = []
+        root_points = []
+        a = 0.05  # spiral growth factor (tunes how fast radius grows)
+        for i in range(10000):
+            t = (
+                i * np.pi / 5000.0
+            )  # angle parameter; adjust divisor for tighter/looser turns
+            r = a * t  # radius grows linearly with t
+            point = Point3(
+                r * np.cos(t),
+                r * np.sin(t),
+                0,
+                reference_frame=tip,
+            )
+            points.append(point)
+            root_points.append(pr2_world_state_reset.transform(point, root))
+        msc = MotionStatechart()
+
+        msc.add_node(
+            cart_traj := CartesianPositionTrajectory(
+                root_link=root,
+                tip_link=tip,
+                goal_points=points,
+            )
+        )
+        msc.add_node(EndMotion.when_true(cart_traj))
+
+        kin_sim = Executor(
+            context=MotionStatechartContext(
+                world=pr2_world_state_reset,
+            ),
+            trajectory_plotter=WorldStateTrajectoryPlotter(),
+        )
+        kin_sim.compile(motion_statechart=msc)
+        kin_sim.tick_until_end()
+        self.compare_trajectories(
+            root_points,
             kin_sim.trajectory_plotter.world_state_trajectory,
             cart_traj.root_link,
             cart_traj.tip_link,

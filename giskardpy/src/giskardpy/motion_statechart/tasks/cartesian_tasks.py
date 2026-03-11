@@ -226,7 +226,7 @@ class CartesianPositionTrajectory(CartesianTask):
             weight=self.weight,
         )
 
-        final_point = context.world.transform(self.goal_points[-1], self.root_link)
+        final_point = self.root_T_goal_reference_frame @ self.goal_points[-1]
 
         distance_to_goal = final_point.euclidean_distance(root_P_current)
         artifacts.observation = distance_to_goal < self.threshold
