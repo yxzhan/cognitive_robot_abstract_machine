@@ -491,7 +491,7 @@ def apartment_world_setup():
     apartment_world.merge_world_at_pose(
         cereal_world,
         HomogeneousTransformationMatrix.from_xyz_rpy(
-            2.37, 1.8, 1.05, reference_frame=apartment_world.root
+            2.37, 2.5, 1.05, reference_frame=apartment_world.root
         ),
     )
     milk_view = Milk(

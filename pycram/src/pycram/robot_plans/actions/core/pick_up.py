@@ -10,7 +10,10 @@ from typing_extensions import Any, Dict
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.factories import and_, or_, not_
 from pycram.datastructures.dataclasses import Context
-from pycram.pose_validator import reachability_validator
+from pycram.pose_validator import (
+    reachability_validator,
+    pose_sequence_reachability_validator,
+)
 from pycram.querying.predicates import GripperIsFree
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
@@ -85,9 +88,14 @@ class ReachAction(ActionDescription):
     ) -> SymbolicExpression:
         manipulator = ViewManager.get_end_effector_view(variables["arm"], context.robot)
         test_world = deepcopy(context.world)
+        grasp_pose_sequence = kwargs["grasp_description"]._pose_sequence(
+            kwargs["target_pose"],
+            kwargs["object_designator"],
+            reverse=kwargs["reverse_reach_order"],
+        )
         return and_(
-            reachability_validator(
-                PoseStamped.from_spatial_type(kwargs["object_designator"].global_pose),
+            pose_sequence_reachability_validator(
+                grasp_pose_sequence,
                 manipulator.tool_frame,
                 context.robot.from_world(test_world),
                 test_world,
@@ -196,10 +204,13 @@ class PickUpAction(ActionDescription):
     ) -> SymbolicExpression:
         manipulator = ViewManager.get_end_effector_view(variables["arm"], context.robot)
         test_world = deepcopy(context.world)
+        grasp_pose_sequence = kwargs["grasp_description"].grasp_pose_sequence(
+            kwargs["object_designator"]
+        )
         return and_(
             GripperIsFree(manipulator),
-            reachability_validator(
-                PoseStamped.from_spatial_type(kwargs["object_designator"].global_pose),
+            pose_sequence_reachability_validator(
+                grasp_pose_sequence,
                 manipulator.tool_frame,
                 context.robot.from_world(test_world),
                 test_world,

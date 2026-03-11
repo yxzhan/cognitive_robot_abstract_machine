@@ -732,6 +732,7 @@ def test_algebra_sequential_plan(mutable_model_world):
 
 def test_parameterization_of_pick_up(mutable_model_world):
     world, robot_view, context = mutable_model_world
+    context.evaluate_conditions = False
 
     milk = world.get_body_by_name("milk.stl")
 

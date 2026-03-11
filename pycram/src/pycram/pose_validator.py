@@ -1,6 +1,7 @@
 import logging
 from copy import deepcopy
 
+import rclpy
 from typing_extensions import List, Union
 
 from giskardpy.executor import Executor
@@ -11,6 +12,9 @@ from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 from krrood.entity_query_language.predicate import symbolic_function
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
+    VizMarkerPublisher,
+)
 from semantic_digital_twin.collision_checking.collision_detector import (
     ClosestPoints,
 )
@@ -115,6 +119,7 @@ def reachability_validator(
     )
 
 
+@symbolic_function
 def pose_sequence_reachability_validator(
     target_sequence: List[PoseStamped],
     tip_link: KinematicStructureEntity,

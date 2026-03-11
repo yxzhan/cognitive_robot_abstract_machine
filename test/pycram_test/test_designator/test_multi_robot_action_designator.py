@@ -2,6 +2,7 @@ from copy import deepcopy
 
 import numpy as np
 import pytest
+import rclpy
 from rustworkx.rustworkx import NoEdgeBetweenNodes
 from typing_extensions import Tuple, Generator
 
