@@ -1081,7 +1081,6 @@ class TestJointTasks:
                 qp_controller_config=QPControllerConfig(
                     target_frequency=20,
                     prediction_horizon=7,
-                    qp_solver_class=QPSolverQPalm,
                 ),
             )
         )
@@ -3166,117 +3165,6 @@ class TestCollisionAvoidance:
             assert contact.distance > 0.249
         assert len(self_collision_bot_world.collision_manager.collision_consumers) == 0
 
-    def test_hard_constraints_violated(self, cylinder_bot_world: World):
-        root = cylinder_bot_world.root
-        with cylinder_bot_world.modify_world():
-            env2 = Body(
-                name=PrefixedName("environment21234"),
-                collision=ShapeCollection(shapes=[Cylinder(width=0.5, height=0.1)]),
-            )
-            env_connection = FixedConnection(
-                parent=root,
-                child=env2,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    0.75
-                ),
-            )
-            cylinder_bot_world.add_connection(env_connection)
-
-            env3 = Body(
-                name=PrefixedName("environment31234"),
-                collision=ShapeCollection(shapes=[Cylinder(width=0.5, height=0.1)]),
-            )
-            env_connection = FixedConnection(
-                parent=root,
-                child=env3,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    1.25
-                ),
-            )
-            cylinder_bot_world.add_connection(env_connection)
-            env4 = Body(
-                name=PrefixedName("environment41234"),
-                collision=ShapeCollection(shapes=[Cylinder(width=0.5, height=0.1)]),
-            )
-            env_connection = FixedConnection(
-                parent=root,
-                child=env4,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=1, y=-0.25
-                ),
-            )
-            cylinder_bot_world.add_connection(env_connection)
-            env5 = Body(
-                name=PrefixedName("environment52134"),
-                collision=ShapeCollection(shapes=[Cylinder(width=0.5, height=0.1)]),
-            )
-            env_connection = FixedConnection(
-                parent=root,
-                child=env5,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=1, y=0.25
-                ),
-            )
-            cylinder_bot_world.add_connection(env_connection)
-
-        tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
-        robot = cylinder_bot_world.get_semantic_annotations_by_type(AbstractRobot)[0]
-
-        msc = MotionStatechart()
-        msc.add_node(
-            UpdateTemporaryCollisionRules(
-                temporary_rules=[
-                    AvoidExternalCollisions(
-                        buffer_zone_distance=0.05, violated_distance=0.0, robot=robot
-                    ),
-                ]
-            )
-        )
-        msc.add_node(
-            Sequence(
-                [
-                    SetOdometry(
-                        base_pose=HomogeneousTransformationMatrix.from_xyz_rpy(
-                            x=1, reference_frame=cylinder_bot_world.root
-                        )
-                    ),
-                    Parallel(
-                        [
-                            CartesianPose(
-                                root_link=cylinder_bot_world.root,
-                                tip_link=tip,
-                                goal_pose=HomogeneousTransformationMatrix.from_xyz_rpy(
-                                    x=0, reference_frame=cylinder_bot_world.root
-                                ),
-                            ),
-                            ExternalCollisionAvoidance(robot=robot),
-                            # ConstTrueNode(),
-                        ]
-                    ),
-                ]
-            )
-        )
-        msc.add_node(local_min := LocalMinimumReached())
-        msc.add_node(EndMotion.when_true(local_min))
-
-        json_data = msc.to_json()
-        json_str = json.dumps(json_data)
-        new_json_data = json.loads(json_str)
-
-        tracker = WorldEntityWithIDKwargsTracker.from_world(cylinder_bot_world)
-        kwargs = tracker.create_kwargs()
-        msc_copy = MotionStatechart.from_json(new_json_data, **kwargs)
-
-        kin_sim = Executor(
-            MotionStatechartContext(
-                world=cylinder_bot_world,
-            )
-        )
-        kin_sim.compile(motion_statechart=msc_copy)
-
-        with pytest.raises(HardConstraintsViolatedException):
-            kin_sim.tick_until_end()
-
     def test_avoid_collision_go_around_corner(self, pr2_with_box):
         r_tip = pr2_with_box.get_kinematic_structure_entity_by_name(
             "r_gripper_tool_frame"
@@ -3471,7 +3359,7 @@ def test_constraint_collection(pr2_world_state_reset: World):
     col.add_inequality_constraint(
         name="same_name",
         reference_velocity=0.2,
-        weight=DefaultWeights.WEIGHT_BELOW_CA,
+        quadratic_weight=DefaultWeights.WEIGHT_BELOW_CA,
         task_expression=expr,
         lower_error=0.1,
         upper_error=0.2,

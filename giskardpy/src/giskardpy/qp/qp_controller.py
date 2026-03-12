@@ -461,7 +461,6 @@ class QPController:
         # 5. turn xdot into control command
         if self.config.conditioning_strategy is not None:
             xdot_full = conditioning.unapply(xdot_full)
-        self.debugger.update(qp_data_raw, xdot_full)
         return self.xdot_to_control_commands(xdot_full)
 
     def xdot_to_control_commands(self, xdot: np.ndarray) -> np.ndarray:

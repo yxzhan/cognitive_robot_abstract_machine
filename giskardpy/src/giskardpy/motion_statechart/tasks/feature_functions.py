@@ -309,7 +309,7 @@ class AngleGoal(FeatureFunctionGoal):
             reference_velocity=self.max_vel,
             upper_error=self.upper_angle - expr,
             lower_error=self.lower_angle - expr,
-            weight=self.weight,
+            quadratic_weight=self.weight,
             task_expression=expr,
             name=f"{self.name}_constraint",
         )
