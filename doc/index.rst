@@ -28,18 +28,19 @@ CRAM consists of the following sub-packages:
 
 -  `PyCRAM <https://cram2.github.io/cognitive_robot_abstract_machine/pycram>`__:
    is the central control unit of the CRAM architecture. It
-   interprets and executes high-level action plans using the CRAM plan
-   language (CPL).
+   interprets and executes high-level action plans using the
+   CRAM plan language (CPL).
 
 -  The `Semantic Digital Twin <https://cram2.github.io/cognitive_robot_abstract_machine/semantic_digital_twin>`__
-   is a world representation that integrates
-   sensor data, robot models, and external knowledge to provide a
-   comprehensive understanding of the robot's environment and tasks.
+   is a world representation that integrates sensor data,
+   robot models, and external knowledge in form of semantic
+   annotations to provide a comprehensive understanding of
+   the robot's environment and tasks.
 
 -  `Giskardpy <https://github.com/SemRoCo/giskardpy>`__ is a
-   Python library for motion planning and control for robots. It uses
-   constraint- and optimization-based task-space control to control the
-   whole body of a robot.
+   Python library for motion control for robots. It uses constraint-
+   and optimization-based task-space control to control the whole
+   body of a robot.
 
 -  `KRROOD <(https://cram2.github.io/cognitive_robot_abstract_machine/krrood)>`__
    is a Python framework that integrates symbolic knowledge
