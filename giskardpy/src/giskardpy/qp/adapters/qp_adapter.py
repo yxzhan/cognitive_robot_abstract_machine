@@ -231,7 +231,7 @@ class DofLimits(DirectLimits):
         degree_of_freedom: DegreeOfFreedom,
         max_derivative: Derivatives,
         config: QPControllerConfig,
-    ) -> DegreeOfFreedomLimits:
+    ) -> DegreeOfFreedomLimits[sm.Vector]:
         lower_limits = DerivativeMap()
         upper_limits = DerivativeMap()
 
@@ -309,7 +309,7 @@ class DofLimits(DirectLimits):
         max_derivative = config.max_derivative
         lower_bounds = []
         upper_bounds = []
-        cache: dict[UUID, DegreeOfFreedomLimits] = {}
+        cache: dict[UUID, DegreeOfFreedomLimits[sm.Vector]] = {}
         for degree_of_freedom in degrees_of_freedom:
             all_limits = self.all_limits(
                 degree_of_freedom=degree_of_freedom,
