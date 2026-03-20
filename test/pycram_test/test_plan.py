@@ -7,8 +7,12 @@ from krrood.entity_query_language.backends import ProbabilisticBackend
 from krrood.entity_query_language.factories import (
     variable_from,
     underspecified,
+    variable,
 )
-from krrood.parametrization.model_registries import DictRegistry
+from krrood.parametrization.model_registries import (
+    DictRegistry,
+    FullyFactorizedRegistry,
+)
 from krrood.parametrization.parameterizer import UnderspecifiedParameters
 from probabilistic_model.probabilistic_circuit.rx.helper import fully_factorized
 
@@ -23,7 +27,7 @@ from pycram.datastructures.pose import (
 from pycram.language import CodeNode
 from pycram.motion_executor import simulated_robot
 from pycram.orm.ormatic_interface import *  # type: ignore
-from pycram.plans.factories import code, sequential
+from pycram.plans.factories import code, sequential, parallel, execute_single
 from pycram.plans.plan import (
     Plan,
 )
@@ -34,6 +38,8 @@ from pycram.plans.plan_node import (
     UnderspecifiedNode,
 )
 from pycram.robot_plans import *
+from pycram.robot_plans.actions.core.navigation import NavigateAction
+from pycram.robot_plans.actions.core.pick_up import PickUpAction
 from pycram.robot_plans.actions.core.robot_body import MoveTorsoAction
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.definitions import TorsoState
@@ -320,49 +326,36 @@ def test_interrupt_plan(immutable_model_world):
     ].position == pytest.approx(0.3, abs=0.1)
 
 
-@pytest.mark.skip(
-    reason="There is some weird error here that causes the interpreter to abort with exit code 134, something with thread handling. Needs more investigation"
-)
 def test_pause_plan(immutable_model_world):
     world, robot_view, context = immutable_model_world
 
     def node_sleep():
         time.sleep(1)
 
-    def pause_plan():
-        Plan.current_plan.root.pause()
-        assert (
-            world.state[
-                world.get_degree_of_freedom_by_name("torso_lift_joint").name
-            ].position
-            == 0
-        )
-        Plan.current_plan.root.resume()
+    def pause_plan(node):
+        node.pause()
+        assert world.state[
+            world.get_degree_of_freedom_by_name("torso_lift_joint").id
+        ].position == pytest.approx(0.0, abs=0.1)
+        node.resume()
+
         time.sleep(3)
-        assert (
-            world.state[
-                world.get_degree_of_freedom_by_name("torso_lift_joint").name
-            ].position
-            == 0.3
-        )
 
-    code_node = CodeNode(pause_plan)
-    sleep_node = CodeNode(node_sleep)
-    robot_plan = SequentialPlan(
-        context,
-        Plan(sleep_node, context),
-        MoveTorsoActionDescription([TorsoState.HIGH]),
-    )
+        assert world.state[
+            world.get_degree_of_freedom_by_name("torso_lift_joint").id
+        ].position == pytest.approx(0.3, abs=0.1)
 
+    code_node = code(function=lambda: None)
+    code_node.code = lambda: pause_plan(code_node)
+    sleep_node = code(lambda: node_sleep())
+    robot_plan = sequential([sleep_node, MoveTorsoAction(TorsoState.HIGH)])
+    plan = parallel([code_node, robot_plan], context=context).plan
     with simulated_robot:
-        ParallelPlan(context, Plan(code_node, context), robot_plan).perform()
+        plan.perform()
 
-    assert (
-        world.state[
-            world.get_degree_of_freedom_by_name("torso_lift_joint").name
-        ].position
-        == 0.3
-    )
+    assert world.state[
+        world.get_degree_of_freedom_by_name("torso_lift_joint").id
+    ].position == pytest.approx(0.3, abs=0.1)
 
 
 def test_algebra_sequential_plan(mutable_model_world):
@@ -383,21 +376,20 @@ def test_algebra_sequential_plan(mutable_model_world):
         target_location=target_location,
         keep_joint_states=...,
     )
-
     navigate_action.resolve()
-    parameters = UnderspecifiedParameters(navigate_action)
 
-    model = fully_factorized(parameters.variables.values())
+    context.query_backend = ProbabilisticBackend(
+        model_registry=FullyFactorizedRegistry()
+    )
 
-    registry = DictRegistry({NavigateAction: model})
-
-    pm_backend = ProbabilisticBackend(registry, 10)
-
-    resolved_navigate = next(pm_backend.evaluate(navigate_action))
-    plan = SequentialPlan(context, MoveTorsoAction(TorsoState.LOW), resolved_navigate)
+    # resolved_navigate = next(pm_backend.evaluate(navigate_action))
+    plan = sequential([MoveTorsoAction(TorsoState.LOW), navigate_action], context).plan
 
     with simulated_robot:
         plan.perform()
+
+    assert isinstance(plan.root.children[1].children[0].designator, NavigateAction)
+    assert len(plan.root.children[1].children) == 1
 
 
 def test_parameterization_of_pick_up(mutable_model_world):
@@ -432,12 +424,11 @@ def test_parameterization_of_pick_up(mutable_model_world):
 
     assert parameters.assignments_for_conditioning[manipulator_offset] == 0.05
 
-    model = fully_factorized(parameters.variables.values())
-    registry = DictRegistry({PickUpAction: model})
+    context.query_backend = ProbabilisticBackend(
+        model_registry=FullyFactorizedRegistry()
+    )
 
-    pm_backend = ProbabilisticBackend(registry, 10)
-    action = next(pm_backend.evaluate(pick_up_description))
-    plan = SequentialPlan(context, action)
+    plan = execute_single(pick_up_description, context)
 
     with simulated_robot:
         try:
