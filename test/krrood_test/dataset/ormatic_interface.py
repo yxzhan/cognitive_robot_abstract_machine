@@ -25,8 +25,6 @@ import krrood.ormatic.custom_types
 import krrood.ormatic.type_dict
 import krrood.symbol_graph.symbol_graph
 import sqlalchemy.sql.sqltypes
-import test.krrood_test.dataset.cyclic_dao_dependency
-import test.krrood_test.dataset.cyclic_dependent_alternative_mappings
 import test.krrood_test.dataset.example_classes
 import test.krrood_test.dataset.semantic_world_like_classes
 import typing
@@ -82,23 +80,6 @@ class GenericClassAssociationDAO_associated_value_list_association(
 
     target: Mapped[GenericClass_PositionDAO] = relationship(
         "GenericClass_PositionDAO", foreign_keys=[target_genericclass_positiondao_id]
-    )
-
-
-class IssueMainMappingDAO_dependencies_association(Base, AssociationDataAccessObject):
-
-    __tablename__ = "_45211609964612094721334018122003087777887129129079552861294028"
-
-    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    source_issuemainmappingdao_id: Mapped[int] = mapped_column(
-        ForeignKey("IssueMainMappingDAO.database_id")
-    )
-    target_issuedependencydao_id: Mapped[int] = mapped_column(
-        ForeignKey("IssueDependencyDAO.database_id")
-    )
-
-    target: Mapped[IssueDependencyDAO] = relationship(
-        "IssueDependencyDAO", foreign_keys=[target_issuedependencydao_id]
     )
 
 
@@ -455,58 +436,6 @@ class CallableWrapperDAO(
     )
 
 
-class CyclicDependentAlternativeMappingContainerDAO(
-    Base,
-    DataAccessObject[
-        test.krrood_test.dataset.cyclic_dependent_alternative_mappings.CyclicDependentAlternativeMappingContainer
-    ],
-):
-
-    __tablename__ = "CyclicDependentAlternativeMappingContainerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    dependency_id: Mapped[int] = mapped_column(
-        ForeignKey("DependencyMappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    main_id: Mapped[int] = mapped_column(
-        ForeignKey("MainMappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    dependency: Mapped[DependencyMappingDAO] = relationship(
-        "DependencyMappingDAO",
-        uselist=False,
-        foreign_keys=[dependency_id],
-        post_update=True,
-    )
-    main: Mapped[MainMappingDAO] = relationship(
-        "MainMappingDAO", uselist=False, foreign_keys=[main_id], post_update=True
-    )
-
-
-class DependencyMappingDAO(
-    Base,
-    DataAccessObject[
-        test.krrood_test.dataset.cyclic_dependent_alternative_mappings.DependencyMapping
-    ],
-):
-
-    __tablename__ = "DependencyMappingDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    name: Mapped[builtins.str] = mapped_column(String(255), use_existing_column=True)
-    value: Mapped[builtins.int] = mapped_column(use_existing_column=True)
-
-
 class GenericClassDAO(
     Base, DataAccessObject[test.krrood_test.dataset.example_classes.GenericClass]
 ):
@@ -524,6 +453,34 @@ class GenericClassDAO(
     __mapper_args__ = {
         "polymorphic_on": "polymorphic_type",
         "polymorphic_identity": "GenericClassDAO",
+    }
+
+
+class GenericClass_floatDAO(
+    GenericClassDAO,
+    DataAccessObject[test.krrood_test.dataset.example_classes.GenericClass[float]],
+):
+
+    __tablename__ = "GenericClass_floatDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(GenericClassDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    value: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    optional_value: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+
+    container: Mapped[typing.List[builtins.float]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "GenericClass_floatDAO",
+        "inherit_condition": database_id == GenericClassDAO.database_id,
     }
 
 
@@ -572,34 +529,6 @@ class GenericClass_PositionDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "GenericClass_PositionDAO",
-        "inherit_condition": database_id == GenericClassDAO.database_id,
-    }
-
-
-class GenericClass_floatDAO(
-    GenericClassDAO,
-    DataAccessObject[test.krrood_test.dataset.example_classes.GenericClass[float]],
-):
-
-    __tablename__ = "GenericClass_floatDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(GenericClassDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    value: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    optional_value: Mapped[typing.Optional[builtins.float]] = mapped_column(
-        use_existing_column=True
-    )
-
-    container: Mapped[typing.List[builtins.float]] = mapped_column(
-        JSON, nullable=False, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "GenericClass_floatDAO",
         "inherit_condition": database_id == GenericClassDAO.database_id,
     }
 
@@ -718,53 +647,6 @@ class InheritanceLevel2WithoutSymbolButAlternativelyMappedMappingDAO(
     }
 
 
-class IssueDependencyDAO(
-    Base,
-    DataAccessObject[test.krrood_test.dataset.cyclic_dao_dependency.IssueDependency],
-):
-
-    __tablename__ = "IssueDependencyDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    name: Mapped[builtins.str] = mapped_column(String(255), use_existing_column=True)
-
-    parent_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey("IssueMainMappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    parent: Mapped[IssueMainMappingDAO] = relationship(
-        "IssueMainMappingDAO", uselist=False, foreign_keys=[parent_id], post_update=True
-    )
-
-
-class IssueMainMappingDAO(
-    Base,
-    DataAccessObject[test.krrood_test.dataset.cyclic_dao_dependency.IssueMainMapping],
-):
-
-    __tablename__ = "IssueMainMappingDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    name: Mapped[builtins.str] = mapped_column(String(255), use_existing_column=True)
-
-    dependencies: Mapped[
-        builtins.list[IssueMainMappingDAO_dependencies_association]
-    ] = relationship(
-        "IssueMainMappingDAO_dependencies_association",
-        collection_class=builtins.list,
-        cascade="all, delete-orphan",
-        foreign_keys="[IssueMainMappingDAO_dependencies_association.source_issuemainmappingdao_id]",
-    )
-
-
 class JSONWrapperDAO(
     Base, DataAccessObject[test.krrood_test.dataset.example_classes.JSONWrapper]
 ):
@@ -783,35 +665,6 @@ class JSONWrapperDAO(
     more_objects: Mapped[
         typing.List[test.krrood_test.dataset.example_classes.JSONSerializableClass]
     ] = mapped_column(JSON, nullable=False, use_existing_column=True)
-
-
-class MainMappingDAO(
-    Base,
-    DataAccessObject[
-        test.krrood_test.dataset.cyclic_dependent_alternative_mappings.MainMapping
-    ],
-):
-
-    __tablename__ = "MainMappingDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    name: Mapped[builtins.str] = mapped_column(String(255), use_existing_column=True)
-
-    dependency_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey("DependencyMappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    dependency: Mapped[DependencyMappingDAO] = relationship(
-        "DependencyMappingDAO",
-        uselist=False,
-        foreign_keys=[dependency_id],
-        post_update=True,
-    )
 
 
 class MixinDAO(Base, DataAccessObject[test.krrood_test.dataset.example_classes.Mixin]):
@@ -958,31 +811,6 @@ class PersonDAO(
         collection_class=builtins.list,
         cascade="all, delete-orphan",
         foreign_keys="[PersonDAO_knows_association.source_persondao_id]",
-    )
-
-
-class PlanReproductionDAO(
-    Base,
-    DataAccessObject[test.krrood_test.dataset.cyclic_dao_dependency.PlanReproduction],
-):
-
-    __tablename__ = "PlanReproductionDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    dependency_id: Mapped[int] = mapped_column(
-        ForeignKey("IssueDependencyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    dependency: Mapped[IssueDependencyDAO] = relationship(
-        "IssueDependencyDAO",
-        uselist=False,
-        foreign_keys=[dependency_id],
-        post_update=True,
     )
 
 

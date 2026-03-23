@@ -20,7 +20,7 @@ from krrood.ormatic.type_dict import TypeDict
 from krrood.ormatic.utils import classes_of_module, create_engine
 from krrood.ormatic.utils import drop_database
 from krrood.utils import recursive_subclasses
-from .dataset import example_classes, semantic_world_like_classes, cyclic_dao_dependency
+from .dataset import example_classes, semantic_world_like_classes
 from .dataset.example_classes import (
     PhysicalObject,
     NotMappedParent,
@@ -29,7 +29,7 @@ from .dataset.example_classes import (
     JSONSerializableClass,
 )
 from .dataset.semantic_world_like_classes import *
-from .dataset import cyclic_dependent_alternative_mappings
+
 from .test_eql.conf.world.doors_and_drawers import DoorsAndDrawersWorld
 from .test_eql.conf.world.handles_and_containers import (
     HandlesAndContainersWorld,
@@ -57,8 +57,6 @@ def generate_sqlalchemy_interface():
     all_classes |= set(classes_of_module(krrood.symbol_graph.symbol_graph))
     all_classes |= set(classes_of_module(example_classes))
     all_classes |= set(classes_of_module(semantic_world_like_classes))
-    all_classes |= set(classes_of_module(cyclic_dao_dependency))
-    all_classes |= set(classes_of_module(cyclic_dependent_alternative_mappings))
     all_classes |= {Symbol}
 
     # remove classes that don't need persistence
