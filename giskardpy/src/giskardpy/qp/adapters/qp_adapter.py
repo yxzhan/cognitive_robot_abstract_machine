@@ -458,8 +458,8 @@ class QPConstraintComponent(ABC):
         return Vector([dof.variables.acceleration for dof in self.degrees_of_freedom])
 
     @property
-    def constraint_names(self) -> list[str]:
-        return [c.name for c in self.constraint_collection.equality_constraints]
+    @abstractmethod
+    def constraint_names(self) -> list[str]: ...
 
 
 @dataclass
@@ -481,7 +481,23 @@ class ConstraintStrategy:
 @dataclass
 class IntegralConstraintStrategy(ConstraintStrategy):
     """
-    Describes a component of a QP problem.
+    Equality constraints have the form:
+    .. math::
+        f(q) = b
+
+    where
+
+    .. math::
+
+        target - f = \Delta t \sum_{k=0}^{N-1} J_{f} * sp_k
+
+    ::
+
+        |   t1   |   t2   |   t1   |   t2   |   t1   |   t2   | prediction horizon
+        |v1 v2 v3|v1 v2 v3|j1 j2 j3|j1 j2 j3|s1 s2 s3|s1 s2 s3| free variables / slack
+        |-----------------------------------------------------|
+        |  J1*sp |  J1*sp |  J3*sp | J3*sp  | sp     | sp     |
+        |-----------------------------------------------------|
     """
 
     degrees_of_freedom: List[DegreeOfFreedom]
@@ -562,28 +578,20 @@ class IntegralConstraintStrategy(ConstraintStrategy):
 
 @dataclass
 class InequalityConstraintModel(InequalityConstraint):
+    strategy: type[ConstraintStrategy] = IntegralConstraintStrategy
 
     def __post_init__(self):
-        self.create_matrix()
-        self.create_bounds()
-        self.create_slack_matrix()
-        self.create_slack_variables()
+        constraints = self.constraint_collection.inequality_constraints
+        strategy = self.strategy(self.degrees_of_freedom, self.config)
+        self.matrix = strategy.create_matrix(constraints)
+        self.slack_matrix = strategy.create_slack_matrix(constraints)
+        self.slack_variables = strategy.create_slack_variables(constraints)
+        self.lower_bounds = strategy.create_bounds([c.lower_error for c in constraints])
+        self.upper_bounds = strategy.create_bounds([c.upper_error for c in constraints])
 
-    def create_matrix(self):
-        if len(self.constraint_collection.inequality_constraints) == 0:
-            self.matrix = sm.Matrix()
-            self.slack_matrix = sm.Matrix()
-            return
-        J_eq = (
-            sm.Vector(
-                self.constraint_collection.equality_constraints_expressions
-            ).jacobian(variables=self.position_variables)
-            * self.config.mpc_dt
-        )
-        self.matrix = sm.hstack(
-            [J_eq for _ in range(self.config.velocity_horizon)]
-            + [sm.Matrix.zeros(J_eq.shape[0], self.number_of_jerk_columns)]
-        )
+    @property
+    def constraint_names(self) -> list[str]:
+        return [c.name for c in self.constraint_collection.inequality_constraints]
 
 
 @dataclass
@@ -710,26 +718,6 @@ class EqualityDerivativeLinkModel(EqualityConstraint):
 
 @dataclass
 class EqualityConstraintModel(EqualityConstraint):
-    """
-    Equality constraints have the form:
-    .. math::
-        f(q) = b
-
-    where
-
-    .. math::
-
-        target - f = \Delta t \sum_{k=0}^{N-1} J_{f} * sp_k
-
-    ::
-
-        |   t1   |   t2   |   t1   |   t2   |   t1   |   t2   | prediction horizon
-        |v1 v2 v3|v1 v2 v3|j1 j2 j3|j1 j2 j3|s1 s2 s3|s1 s2 s3| free variables / slack
-        |-----------------------------------------------------|
-        |  J1*sp |  J1*sp |  J3*sp | J3*sp  | sp     | sp     |
-        |-----------------------------------------------------|
-    """
-
     strategy: type[ConstraintStrategy] = IntegralConstraintStrategy
 
     def __post_init__(self):
@@ -739,6 +727,10 @@ class EqualityConstraintModel(EqualityConstraint):
         self.slack_matrix = strategy.create_slack_matrix(constraints)
         self.slack_variables = strategy.create_slack_variables(constraints)
         self.bounds = strategy.create_bounds([c.bound for c in constraints])
+
+    @property
+    def constraint_names(self) -> list[str]:
+        return [c.name for c in self.constraint_collection.equality_constraints]
 
 
 @dataclass
@@ -1709,21 +1701,30 @@ class QPDataSymbolic:
             constraint_collection=self.constraint_collection,
             config=self.config,
         )
+        ineq_constraints = InequalityConstraintModel(
+            degrees_of_freedom=self.degrees_of_freedom,
+            constraint_collection=self.constraint_collection,
+            config=self.config,
+        )
         self.quadratic_weights = sm.concatenate(
             direct_limits.quadratic_weights,
             eq_constraints.slack_variables.quadratic_weights,
+            ineq_constraints.slack_variables.quadratic_weights,
         )
         self.linear_weights = sm.concatenate(
             direct_limits.linear_weights,
             eq_constraints.slack_variables.linear_weights,
+            ineq_constraints.slack_variables.linear_weights,
         )
         self.box_lower_constraints = sm.concatenate(
             direct_limits.lower_bounds,
             eq_constraints.slack_variables.lower_bounds,
+            ineq_constraints.slack_variables.lower_bounds,
         )
         self.box_upper_constraints = sm.concatenate(
             direct_limits.upper_bounds,
             eq_constraints.slack_variables.upper_bounds,
+            ineq_constraints.slack_variables.upper_bounds,
         )
 
         self.eq_matrix_dofs = sm.vstack([mpc_model.matrix, eq_constraints.matrix])
@@ -1735,10 +1736,11 @@ class QPDataSymbolic:
             mpc_model.constraint_names + eq_constraints.constraint_names
         )
 
-        self.neq_matrix_dofs = Matrix()
-        self.neq_matrix_slack = Matrix()
-        self.neq_lower_bounds = Vector()
-        self.neq_upper_bounds = Vector()
+        self.neq_matrix_dofs = sm.vstack([ineq_constraints.matrix])
+        self.neq_matrix_slack = sm.diag_stack([ineq_constraints.slack_matrix])
+        self.neq_lower_bounds = ineq_constraints.lower_bounds
+        self.neq_upper_bounds = ineq_constraints.upper_bounds
+        self.neq_constraint_names = ineq_constraints.constraint_names
 
     def __hash__(self):
         return hash(id(self))

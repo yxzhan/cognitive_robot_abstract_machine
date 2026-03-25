@@ -39,6 +39,8 @@ class QPDebugger:
     direct_limits: pandas.DataFrame = field(init=False)
     equality_constraints: pandas.DataFrame = field(init=False)
     equality_matrix: pandas.DataFrame = field(init=False)
+    inequality_constraints: pandas.DataFrame = field(init=False)
+    inequality_matrix: pandas.DataFrame = field(init=False)
     # weights: pandas.DataFrame = field(init=False)
     # A: pandas.DataFrame = field(init=False)
     # b: pandas.DataFrame = field(init=False)
@@ -59,9 +61,11 @@ class QPDebugger:
         )
         if self.current_solution is not None:
             last_solution[self.quadratic_weight_filter] = self.current_solution
+
         self.current_solution = last_solution
         self.create_direct_limits()
         self.create_equality_constraints()
+        self.create_inequality_constraints()
 
     @property
     def quadratic_weight_filter(self) -> np.ndarray:
@@ -106,6 +110,29 @@ class QPDebugger:
         self.equality_matrix = pd.DataFrame(
             eq_matrix_dofs_np,
             self.equality_constr_names,
+            self.degree_of_freedom_names,
+            dtype=float,
+        )
+
+    def create_inequality_constraints(self):
+        neq_matrix_dofs_np = self.qp_data_symbolic.neq_matrix_dofs.evaluate()
+        neq_matrix_slack_np = self.qp_data_symbolic.neq_matrix_slack.evaluate()
+        Ex = neq_matrix_dofs_np @ self.current_solution[: neq_matrix_dofs_np.shape[1]]
+        lower_bounds = self.qp_data_symbolic.neq_lower_bounds.evaluate()
+        upper_bounds = self.qp_data_symbolic.neq_upper_bounds.evaluate()
+        self.inequality_constraints = pd.DataFrame(
+            {
+                "lower_bounds": lower_bounds,
+                "Ex": Ex,
+                # "slack": bounds - Ex,
+                "upper_bounds": upper_bounds,
+            },
+            self.inequality_constr_names,
+            dtype=float,
+        )
+        self.inequality_matrix = pd.DataFrame(
+            neq_matrix_dofs_np,
+            self.inequality_constr_names,
             self.degree_of_freedom_names,
             dtype=float,
         )
@@ -330,10 +357,17 @@ class QPDebugger:
 
     @property
     def free_variable_names(self) -> list[str]:
-        return self.degree_of_freedom_names + [
-            c.name
-            for c in self.qp_data_symbolic.constraint_collection.equality_constraints
-        ]
+        return (
+            self.degree_of_freedom_names
+            + [
+                c.name
+                for c in self.qp_data_symbolic.constraint_collection.equality_constraints
+            ]
+            + [
+                c.name
+                for c in self.qp_data_symbolic.constraint_collection.inequality_constraints
+            ]
+        )
 
     @property
     def degree_of_freedom_names(self) -> list[str]:
@@ -355,7 +389,7 @@ class QPDebugger:
 
     @property
     def inequality_constr_names(self):
-        return self.qp_controller.qp_data_factory.qp_data._inequality_bounds.names
+        return self.qp_data_symbolic.neq_constraint_names
 
     def _print_iis(self):
         import pandas as pd

@@ -8,6 +8,7 @@ from giskardpy.qp.adapters.qp_adapter import (
     EqualityDerivativeLinkModel,
     EqualityConstraintModel,
     QPDataSymbolic,
+    InequalityConstraintModel,
 )
 from giskardpy.qp.constraint_collection import ConstraintCollection
 from giskardpy.qp.qp_controller_config import QPControllerConfig
@@ -308,6 +309,48 @@ def test_equality_constraint_model(prismatic_bot2):
     assert eq_constraint_model.slack_matrix[0, 0] == (1 / target_frequency)
 
 
+def test_inequality_constraint_model(prismatic_bot2):
+    target_frequency = 20
+    prediction_horizon = 10
+    number_of_variables = len(prismatic_bot2.active_degrees_of_freedom)
+    constraints = ConstraintCollection()
+    dof1 = prismatic_bot2.active_degrees_of_freedom[0]
+    dof2 = prismatic_bot2.active_degrees_of_freedom[0]
+    constraints.add_inequality_constraint(
+        task_expression=dof1.variables.position,
+        lower_error=0,
+        upper_error=1,
+        quadratic_weight=1,
+        reference_velocity=1,
+    )
+    ineq_constraint_model = InequalityConstraintModel(
+        degrees_of_freedom=prismatic_bot2.active_degrees_of_freedom,
+        constraint_collection=constraints,
+        config=QPControllerConfig(
+            target_frequency=target_frequency, prediction_horizon=prediction_horizon
+        ),
+    )
+    assert np.allclose(
+        sum(ineq_constraint_model.matrix[0, :].to_np()),
+        (1 / target_frequency) * (prediction_horizon - 2),
+    )
+
+    assert ineq_constraint_model.lower_bounds[0] == 0
+
+    assert ineq_constraint_model.upper_bounds[
+        0
+    ] == ineq_constraint_model.config.radian_normalization_number * (
+        1 / target_frequency
+    ) * (
+        prediction_horizon - 2
+    )
+    assert ineq_constraint_model.slack_variables.quadratic_weights[0] != 0
+    assert ineq_constraint_model.slack_variables.linear_weights[0] == 0
+    assert ineq_constraint_model.slack_variables.lower_bounds < 0
+    assert ineq_constraint_model.slack_variables.upper_bounds > 0
+    assert ineq_constraint_model.slack_matrix[0, 0] == (1 / target_frequency)
+
+
 def test_qp_data_symbolic(prismatic_bot2):
     constraints = ConstraintCollection()
     dof1 = prismatic_bot2.active_degrees_of_freedom[0]
@@ -325,6 +368,14 @@ def test_qp_data_symbolic(prismatic_bot2):
         quadratic_weight=0,
         reference_velocity=1,
         name="0 weight constraint",
+    )
+    constraints.add_inequality_constraint(
+        task_expression=dof2.variables.position,
+        lower_error=0.1,
+        upper_error=1,
+        quadratic_weight=1,
+        reference_velocity=1,
+        name="ineq constraint",
     )
     qp_data_symbolic = QPDataSymbolic(
         degrees_of_freedom=prismatic_bot2.active_degrees_of_freedom,
@@ -345,5 +396,7 @@ def test_qp_data_symbolic(prismatic_bot2):
     qp_data_filtered = qp_data.apply_filters()
     solution = QPSolverPIQP().solver_call(qp_data_filtered)
     debugger = QPDebugger(qp_data_symbolic=qp_data_symbolic, current_solution=solution)
+    assert len(debugger.inequality_constraints) == 1
+    assert len(debugger.equality_constraints) == 22
 
     pass
