@@ -83,7 +83,7 @@ class UnitreeG1(AbstractRobot, SpecifiesLeftRightArm, HasNeck):
                     buffer_zone_distance=0.2,
                     violated_distance=0.05,
                     robot=self,
-                    body_subset={self._world.get_body_by_name("base_link")},
+                    body_subset={self._world.get_body_by_name("pelvis")},
                 ),
                 AvoidSelfCollisions(
                     buffer_zone_distance=0.05, violated_distance=0.0, robot=self
@@ -94,7 +94,7 @@ class UnitreeG1(AbstractRobot, SpecifiesLeftRightArm, HasNeck):
         self._world.collision_manager.extend_max_avoided_bodies_rules(
             [
                 MaxAvoidedCollisionsOverride(
-                    2, bodies={self._world.get_body_by_name("base_link")}
+                    2, bodies={self._world.get_body_by_name("pelvis")}
                 ),
                 MaxAvoidedCollisionsOverride(
                     4,

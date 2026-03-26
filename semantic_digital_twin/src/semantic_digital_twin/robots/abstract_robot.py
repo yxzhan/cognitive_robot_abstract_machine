@@ -546,7 +546,7 @@ class AbstractRobot(Agent, ABC):
             robot = cls._init_empty_robot(world)
             robot._setup_semantic_annotations()
             world.add_semantic_annotation(robot)
-            # robot._setup_collision_rules()
+            robot._setup_collision_rules()
             robot._setup_velocity_limits()
             robot._setup_hardware_interfaces()
             robot._setup_joint_states()
