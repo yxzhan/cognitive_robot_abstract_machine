@@ -16,7 +16,6 @@ import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-import numpy as np
 from anytree import NodeMixin, PreOrderIter, findall
 from scipy.special import logsumexp
 from random_events.interval import closed
@@ -35,7 +34,7 @@ from .utils import (
     sum_unit_is_normalized,
 )
 
-
+@dataclass
 class MarginalDeterminismTreeNode(NodeMixin):
     """
     One node of a Marginal Determinism Variable Tree.
@@ -234,7 +233,7 @@ class FailureDiagnosisResult:
         )
 
 
-
+@dataclass
 class CausalCircuit:
     """
     A ProbabilisticCircuit extended with exact, tractable causal inference
@@ -353,9 +352,6 @@ class CausalCircuit:
                         if len(valid_marginals) < 2:
                             continue
 
-                        # Check whether any pair of children is disjoint on
-                        # this variable — if none are disjoint, this SumUnit
-                        # does not split on this variable at all, so skip it.
                         any_disjoint = False
                         for i, j in itertools.combinations(range(len(valid_marginals)), 2):
                             try:
@@ -366,11 +362,8 @@ class CausalCircuit:
                                 pass
 
                         if not any_disjoint:
-                            # This SumUnit doesn't split on query_variable — skip.
                             continue
 
-                        # This SumUnit does split on query_variable.
-                        # Verify all pairs of children are pairwise disjoint.
                         for child_a, child_b in itertools.combinations(
                             range(len(children)), 2
                         ):
@@ -398,6 +391,7 @@ class CausalCircuit:
 
         del root_support_event
         return violations
+
     def verify_support_determinism(self) -> SupportDeterminismVerificationResult:
         """
         Verify support determinism of the circuit against the Marginal Determinism
@@ -627,6 +621,7 @@ class CausalCircuit:
                 f"adjustment={[v.name for v in adjustment_variables]}."
             )
         return output_circuit
+
     def _extract_leaf_regions_for_variable(
         self,
         variable: Variable,
