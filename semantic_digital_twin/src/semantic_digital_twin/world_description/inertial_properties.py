@@ -25,7 +25,7 @@ class NPMatrix3x3(SubclassJSONSerializer):
         return {**super().to_json(), "data": self.data.tolist()}
 
     @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
+    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
         return cls(data=np.array(data["data"]))
 
 
