@@ -7,8 +7,8 @@ from time import sleep
 from typing import Dict, Optional, List
 
 import rclpy
-from giskard_msgs.action import JsonAction
-from giskard_msgs.action._json_action import JsonAction_Result
+from json_msgs.action import JsonAction
+from json_msgs.action._json_action import JsonAction_Result
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.exceptions import ExecutionException
 from giskardpy.middleware.ros2.ros2_interface import MyActionClient

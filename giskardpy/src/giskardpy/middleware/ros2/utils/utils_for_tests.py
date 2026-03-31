@@ -5,7 +5,6 @@ from threading import Thread
 from time import sleep
 from typing import Tuple, Optional, List, Dict, Union, Iterable
 
-import giskard_msgs.msg as giskard_msgs
 import numpy as np
 from angles import shortest_angular_distance
 from geometry_msgs.msg import PoseStamped, Point, PointStamped, Quaternion, Pose
@@ -290,7 +289,7 @@ class GiskardTester(ABC):
         name: str,
         radius: float = 1.0,
         pose: PoseStamped = None,
-        parent_link: Optional[Union[str, giskard_msgs.LinkName]] = None,
+        parent_link: str | PrefixedName | None = None,
     ) -> None:
         if parent_link is None:
             parent_link = self.api.world.root
@@ -320,7 +319,7 @@ class GiskardTester(ABC):
         height: float,
         radius: float,
         pose: PoseStamped = None,
-        parent_link: Optional[Union[str, giskard_msgs.LinkName]] = None,
+        parent_link: str | PrefixedName | None = None,
     ) -> None:
         if parent_link is None:
             parent_link = self.api.world.root
@@ -351,7 +350,7 @@ class GiskardTester(ABC):
         pose: PoseStamped,
         name: str = "meshy",
         mesh: str = "",
-        parent_link: Optional[Union[str, giskard_msgs.LinkName]] = None,
+        parent_link: str | PrefixedName | None = None,
         scale: Tuple[float, float, float] = (1.0, 1.0, 1.0),
     ) -> None:
         if parent_link is None:
@@ -383,7 +382,7 @@ class GiskardTester(ABC):
         name: str,
         urdf: str,
         pose: HomogeneousTransformationMatrix,
-        parent_link: Optional[Union[str, giskard_msgs.LinkName]] = None,
+        parent_link: str | PrefixedName | None = None,
     ) -> None:
         if parent_link is None:
             parent_link = self.api.world.root
@@ -406,7 +405,7 @@ class GiskardTester(ABC):
     def update_parent_link_of_group(
         self,
         name: str,
-        parent_link: Optional[Union[str, giskard_msgs.LinkName]] = None,
+        parent_link: str | PrefixedName | None = None,
     ) -> None:
         with self.api.world.modify_world():
             body = self.api.world.get_kinematic_structure_entity_by_name(name)

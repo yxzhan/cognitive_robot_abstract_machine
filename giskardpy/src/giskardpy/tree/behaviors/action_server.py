@@ -2,7 +2,6 @@ from queue import Queue, Empty
 from time import sleep
 from typing import Any, Optional
 
-from giskard_msgs.action import Move
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.action.server import ServerGoalHandle
 from rclpy.timer import Timer
@@ -58,15 +57,6 @@ class ActionServerHandler:
     def cancel_callback(self, goal_handle: ServerGoalHandle):
         self.loginfo(f"Cancel request received.")
         return CancelResponse.ACCEPT
-
-    def is_goal_msg_type_execute(self):
-        return self.goal_msg.type in [Move.Goal.EXECUTE]
-
-    def is_goal_msg_type_projection(self):
-        return Move.Goal.PROJECTION == self.goal_msg.type
-
-    def is_goal_msg_type_undefined(self):
-        return Move.Goal.UNDEFINED == self.goal_msg.type
 
     async def execute_cb(self, goal: ServerGoalHandle) -> None:
         while self.goal_handle is not None:

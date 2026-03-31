@@ -1,4 +1,4 @@
-from giskard_msgs.action import JsonAction
+from json_msgs.action import JsonAction
 from py_trees.composites import Sequence
 from py_trees.decorators import FailureIsSuccess
 

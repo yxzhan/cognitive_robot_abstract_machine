@@ -16,7 +16,6 @@ from geometry_msgs.msg import (
     Vector3Stamped,
     PointStamped,
 )
-from giskard_msgs.action._move import Move_Goal
 from numpy import pi
 from rclpy.duration import Duration
 
@@ -1872,20 +1871,9 @@ class TestActionServerEvents:
         with pytest.raises(ExecutionCanceledException):
             await giskard.api.get_result()
 
-    @pytest.mark.skip(reason="projection not yet supported.")
-    def test_undefined_type(self, giskard: PR2Tester):
-        giskard.api.motion_goals.allow_all_collisions()
-        giskard.send_goal(goal_type=Move_Goal.UNDEFINED, expected_error_type=Exception)
-
     def test_empty_goal(self, giskard: PR2Tester):
         with pytest.raises(EmptyMotionStatechartError):
             giskard.api.execute(MotionStatechart())
-
-    @pytest.mark.skip(reason="projection not yet supported.")
-    def test_plan_only(self, giskard: PR2Tester, pocky_pose_state):
-        giskard.api.motion_goals.allow_self_collision()
-        giskard.api.motion_goals.add_joint_position(pocky_pose_state)
-        giskard.projection()
 
     @pytest.mark.asyncio
     async def test_world_updats_during_execution(self, giskard: PR2Tester):

@@ -1,7 +1,7 @@
 import json
 from typing import Union
 
-from giskard_msgs.action import JsonAction
+from json_msgs.action import JsonAction
 from py_trees.common import Status
 
 from giskardpy.motion_statechart.goals.base_traj_follower import BaseTrajFollower

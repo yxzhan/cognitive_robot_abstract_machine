@@ -1,6 +1,6 @@
 import json
 
-from giskard_msgs.action import JsonAction
+from json_msgs.action import JsonAction
 from py_trees.common import Status
 
 from giskardpy.utils.decorators import record_time

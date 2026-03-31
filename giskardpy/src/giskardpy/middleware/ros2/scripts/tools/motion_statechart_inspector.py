@@ -20,16 +20,15 @@ from PyQt5.QtWidgets import (
     QGraphicsScene,
     QShortcut,
 )
-from giskard_msgs.action._json_action import JsonAction_FeedbackMessage
-from giskard_msgs.msg import ExecutionState
-
+from giskardpy.middleware.ros2 import rospy
 from giskardpy.motion_statechart.motion_statechart import (
     MotionStatechart,
     LifeCycleState,
     ObservationState,
 )
 from giskardpy.motion_statechart.plotters.graphviz import MotionStatechartGraphviz
-from giskardpy.middleware.ros2 import rospy
+from json_msgs.action import JsonAction
+from json_msgs.action._json_action import JsonAction_FeedbackMessage
 
 compact = False
 
@@ -243,7 +242,7 @@ class DotGraphViewer(QWidget):
                 qos_profile=10,
             )
 
-    def on_new_message_received(self, msg: ExecutionState) -> None:
+    def on_new_message_received(self, msg: JsonAction.Feedback) -> None:
         self.new_message_signal.emit(msg)
 
     def handle_new_message(self, msg: JsonAction_FeedbackMessage) -> None:
