@@ -101,3 +101,36 @@ class Sage10kDatasetLoader:
         unzipped = self._unzip_scene(target_path)
         scene = self._parse_json(unzipped)
         return scene
+
+    @classmethod
+    def available_scenes(
+        cls, repository: str = "nvidia/SAGE-10k", folder_path: str = "scenes"
+    ) -> list[str]:
+        """
+        Use this to select random scenes from the dataset.
+
+        :param repository: The repo id of the dataset.
+        :param folder_path: The path to the folder containing the scenes in the repository.
+        :return: A list of all possible URLs to the scenes in the dataset.
+        """
+        from huggingface_hub import HfFileSystem
+
+        fs = HfFileSystem()
+
+        # Hugging Face filesystem paths follow the format: datasets/repo_id/path
+        full_path = f"datasets/{repository}/{folder_path}"
+
+        # List all files (glob '**/*' to get nested files if needed)
+        files = fs.glob(f"{full_path}/**/*")
+
+        # Filter out directories and convert to "resolve" URLs
+        base_url = f"https://huggingface.co/datasets/{repository}/resolve/main"
+
+        urls = []
+        for file in files:
+            # fs.glob returns paths like 'datasets/nvidia/SAGE-10k/scenes/file.ext'
+            # We need to strip the 'datasets/repo_id/' prefix
+            relative_path = file.replace(f"datasets/{repository}/", "")
+            urls.append(f"{base_url}/{relative_path}")
+
+        return urls

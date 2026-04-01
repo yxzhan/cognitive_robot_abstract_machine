@@ -10,6 +10,9 @@ def test_loader(rclpy_node):
     )
     scene = loader.create_scene()
 
+    print(*{o.type for room in scene.rooms for o in room.objects}, sep="\n")
+
+    return
     world = scene.create_world()
     pub = VizMarkerPublisher(
         _world=world,
