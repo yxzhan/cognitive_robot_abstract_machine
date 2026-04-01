@@ -51,7 +51,6 @@ import semantic_digital_twin.robots.icub3
 import semantic_digital_twin.robots.justin
 import semantic_digital_twin.robots.kevin
 import semantic_digital_twin.robots.minimal_robot
-import semantic_digital_twin.robots.mmp_dresden
 import semantic_digital_twin.robots.panda
 import semantic_digital_twin.robots.pr2
 import semantic_digital_twin.robots.robot_mixins
@@ -1031,20 +1030,6 @@ class KevinDAO_arms_association(Base, AssociationDataAccessObject):
     target_armdao_id: Mapped[int] = mapped_column(ForeignKey("ArmDAO.database_id"))
 
     target: Mapped[ArmDAO] = relationship("ArmDAO", foreign_keys=[target_armdao_id])
-
-
-class MMPDresdenDAO_arms_association(Base, AssociationDataAccessObject):
-
-    __tablename__ = "_76226530430595008126369695010372107757787552155808979552563469"
-
-    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    source_mmpdresdendao_id: Mapped[int] = mapped_column(
-        ForeignKey("MMPDresdenDAO.database_id")
-    )
-    target_armdao_id: Mapped[int] = mapped_column(ForeignKey("ArmDAO.database_id"))
-
-    target: Mapped[ArmDAO] = relationship("ArmDAO", foreign_keys=[target_armdao_id])
-
 
 class MinimalRobotDAO_bodies_of_branch_association(Base, AssociationDataAccessObject):
 
@@ -8528,42 +8513,6 @@ class KevinDAO(
         "polymorphic_identity": "KevinDAO",
         "inherit_condition": database_id == AbstractRobotDAO.database_id,
     }
-
-
-class MMPDresdenDAO(
-    AbstractRobotDAO,
-    DataAccessObject[semantic_digital_twin.robots.mmp_dresden.MMPDresden],
-):
-
-    __tablename__ = "MMPDresdenDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(AbstractRobotDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    neck_id: Mapped[int] = mapped_column(
-        ForeignKey("NeckDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    neck: Mapped[NeckDAO] = relationship(
-        "NeckDAO", uselist=False, foreign_keys=[neck_id], post_update=True
-    )
-    arms: Mapped[builtins.list[MMPDresdenDAO_arms_association]] = relationship(
-        "MMPDresdenDAO_arms_association",
-        collection_class=builtins.list,
-        cascade="all, delete-orphan",
-        foreign_keys="[MMPDresdenDAO_arms_association.source_mmpdresdendao_id]",
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "MMPDresdenDAO",
-        "inherit_condition": database_id == AbstractRobotDAO.database_id,
-    }
-
 
 class MinimalRobotDAO(
     AbstractRobotDAO,
