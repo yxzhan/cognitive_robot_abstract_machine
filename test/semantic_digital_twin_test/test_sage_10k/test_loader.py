@@ -19,3 +19,4 @@ def test_loader(rclpy_node):
     #     node=rclpy_node,
     # )
     # pub.with_tf_publisher()
+    print([type(a) for a in world.semantic_annotations])

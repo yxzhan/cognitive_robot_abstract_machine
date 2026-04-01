@@ -9,7 +9,7 @@ import tqdm
 import trimesh
 import trimesh.visual
 from PIL import Image
-from typing_extensions import Optional, Tuple
+from typing_extensions import Optional, Tuple, assert_never
 
 from krrood.utils import get_full_class_name
 
@@ -17,7 +17,7 @@ from krrood.utils import get_full_class_name
 from krrood.adapters.exceptions import JSON_TYPE_NAME
 from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, from_json
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor, Wall
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
@@ -155,11 +155,32 @@ class Sage10kPhysicallyBasedRendering(SubclassJSONSerializer):
 @dataclass
 class Sage10kWall(SubclassJSONSerializer):
     id: str
+
     start_point: Sage10kPosition
+    """
+    The start point of the wall.
+    Only x and y matter.
+    """
     end_point: Sage10kPosition
+    """
+    The end point of the wall.
+    Only x and y matter.
+    """
+
     material: str
+    """
+    The wall materials filename found in the `materials` folder.
+    """
+
     height: float
+    """
+    The height of the wall
+    """
+
     thickness: float
+    """
+    The thickness of the wall
+    """
 
     def to_json(self) -> Dict[str, Any]:
         """
@@ -188,6 +209,60 @@ class Sage10kWall(SubclassJSONSerializer):
             height=data["height"],
             thickness=data["thickness"],
         )
+
+    def create_in_world(self, world: World, directory_path: Path, parent: Body) -> Wall:
+        wall_name = PrefixedName(name=self.id)
+
+        # the wall length is given by x
+        if self.start_point.x != self.end_point.x:
+            wall_length = self.end_point.x - self.start_point.x
+            yaw = 0
+        # the wall length is given by y
+        elif self.start_point.y != self.end_point.y:
+            wall_length = self.end_point.y - self.start_point.y
+            yaw = math.pi / 2
+        else:
+            assert_never(self)
+
+        wall_scale = Scale(x=self.thickness, y=wall_length, z=self.height)
+
+        center_x = self.end_point.x + self.start_point.x / 2
+        center_y = self.end_point.y + self.start_point.y / 2
+
+        parent_T_wall = HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=center_x,
+            y=center_y,
+            z=0.0,
+            yaw=yaw,
+            reference_frame=parent,
+        )
+
+        with world.modify_world():
+            annotation = Wall.create_with_new_body_in_world(
+                name=wall_name,
+                scale=wall_scale,
+                world=world,
+                world_root_T_self=parent_T_wall,
+            )
+
+        body = annotation.root
+
+        geometry_with_texture = ShapeCollection(
+            [
+                Mesh.from_trimesh(
+                    origin=HomogeneousTransformationMatrix(reference_frame=body),
+                    mesh=body.collision.combined_mesh,
+                    texture_file_path=str(
+                        directory_path / "materials" / f"{self.material}.png"
+                    ),
+                )
+            ],
+            reference_frame=body,
+        )
+        body.collision = geometry_with_texture
+        body.visual = geometry_with_texture
+
+        return annotation
 
 
 @dataclass
@@ -322,118 +397,48 @@ class Sage10kObject(SubclassJSONSerializer):
 
 
 @dataclass
-class Sage10kRoom(SubclassJSONSerializer):
-    id: str
-
-    room_type: str
-    """
-    The type of the room.
-    """
-
-    dimensions: Sage10kSize
-    """
-    The scale of the room.
-    """
-
-    position: Sage10kPosition
-    """
-    The position of the rooms center? in the scene.
-    """
-
-    floor_material: str
-    """
-    The floor materials filename found in the materials folder.
-    """
-
-    objects: List[Sage10kObject] = field(default_factory=list)
-    walls: List[Sage10kWall] = field(default_factory=list)
-
-    def _create_floor(self, world: World, directory_path: Path, parent: Body):
-        # create the floor
-        floor_body = Body(name=PrefixedName(name="floor", prefix=self.id))
-        floor_mesh = Box(
-            scale=Scale(x=self.dimensions.x, y=self.dimensions.y, z=0.01)
-        ).mesh
-        floor_geometry = ShapeCollection(
-            [
-                Mesh.from_trimesh(
-                    origin=HomogeneousTransformationMatrix(reference_frame=floor_body),
-                    mesh=floor_mesh,
-                    texture_file_path=str(
-                        directory_path / f"{self.floor_material}.png"
-                    ),
-                )
-            ],
-            reference_frame=floor_body,
-        )
-        floor_body.collision = floor_geometry
-        floor_body.visual = floor_geometry
-
-        floor_annotation = Floor()
-
-        with world.modify_world():
-            parent_C_floor = FixedConnection(
-                parent=parent,
-                child=floor_body,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=self.position.x, y=self.position.y, z=self.position.z
-                ),
-            )
-            world.add_body(floor_body)
-            world.add_connection(parent_C_floor)
-        return floor_body
-
-    def create_in_world(self, world: World, directory_path: Path, parent: Body) -> Body:
-        floor = self._create_floor(world, directory_path, parent)
-
-        # create the objects
-        for sage_object in tqdm.tqdm(self.objects, desc=f"Parsing objects"):
-            sage_object.create_in_world(world, directory_path, parent=world.root)
-
-        return world.root
-
-    def to_json(self) -> Dict[str, Any]:
-        """
-        Serialize to JSON.
-        """
-        return {
-            JSON_TYPE_NAME: get_full_class_name(self.__class__),
-            "id": self.id,
-            "room_type": self.room_type,
-            "dimensions": to_json(self.dimensions),
-            "position": to_json(self.position),
-            "floor_material": self.floor_material,
-            "objects": to_json(self.objects),
-            "walls": to_json(self.walls),
-        }
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Sage10kRoom:
-        """
-        Deserialize from JSON.
-        """
-        return cls(
-            id=data["id"],
-            room_type=data["room_type"],
-            dimensions=Sage10kSize._from_json(data["dimensions"], **kwargs),
-            position=Sage10kPosition._from_json(data["position"], **kwargs),
-            floor_material=data["floor_material"],
-            objects=[Sage10kObject._from_json(d, **kwargs) for d in data["objects"]],
-            walls=[Sage10kWall._from_json(w, **kwargs) for w in data["walls"]],
-        )
-
-
-@dataclass
 class Sage10kDoor(SubclassJSONSerializer):
     id: str
+
     wall_id: str
+    """
+    Id of the wall where the door should be created on.
+    """
+
     position_on_wall: float
+    """
+    Position on wall as percentage of total length?
+    """
+
     width: float
+    """
+    Width of the door in meters.
+    """
+
     height: float
+    """
+    Height of the door in meters.
+    """
+
     door_type: str
+    """
+    Type of the door.
+    """
+
     opens_inward: bool
+    """
+    Rather it opens to the inside of the room or the outside.
+    """
+
     opening: bool
+    """
+    No idea
+    """
+
     door_material: str
+    """
+    The door materials filename found in the `materials` folder.
+    """
 
     def to_json(self) -> Dict[str, Any]:
         """
@@ -467,6 +472,149 @@ class Sage10kDoor(SubclassJSONSerializer):
             opens_inward=data["opens_inward"],
             opening=data["opening"],
             door_material=data["door_material"],
+        )
+
+    def create_in_world(self, world: World, directory_path: Path, parent: Body) -> Body:
+        """
+        The parent is the wall always.
+        :param world:
+        :param directory_path:
+        :param parent:
+        :return:
+        """
+        ...
+
+
+@dataclass
+class Sage10kRoom(SubclassJSONSerializer):
+    id: str
+
+    room_type: str
+    """
+    The type of the room.
+    """
+
+    dimensions: Sage10kSize
+    """
+    The scale of the room.
+    """
+
+    position: Sage10kPosition
+    """
+    The position of the rooms center? in the scene.
+    """
+
+    floor_material: str
+    """
+    The floor materials filename found in the `materials` folder.
+    """
+
+    objects: List[Sage10kObject] = field(default_factory=list)
+    """
+    Objects found in this room.
+    """
+
+    walls: List[Sage10kWall] = field(default_factory=list)
+    """
+    Walls of this room.
+    """
+
+    doors: List[Sage10kDoor] = field(default_factory=list)
+    """
+    The doors of the room
+    """
+
+    def _create_floor(self, world: World, directory_path: Path, parent: Body):
+        # create the floor
+        floor_name = PrefixedName(name="floor", prefix=self.id)
+        floor_mesh = Box(
+            scale=Scale(x=self.dimensions.x, y=self.dimensions.y, z=0.01)
+        ).mesh
+
+        parent_T_floor = HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=self.position.x,
+            y=self.position.y,
+            z=self.position.z,
+            reference_frame=parent,
+        )
+
+        with world.modify_world():
+            floor_annotation = Floor.create_with_new_body_in_world(
+                scale=Scale(x=self.dimensions.x, y=self.dimensions.y, z=0.01),
+                world=world,
+                name=floor_name,
+                world_root_T_self=parent_T_floor,
+            )
+
+        floor_body = floor_annotation.root
+
+        floor_geometry_with_texture = ShapeCollection(
+            [
+                Mesh.from_trimesh(
+                    origin=HomogeneousTransformationMatrix(reference_frame=floor_body),
+                    mesh=floor_mesh,
+                    texture_file_path=str(
+                        directory_path / "materials" / f"{self.floor_material}.png"
+                    ),
+                )
+            ],
+            reference_frame=floor_body,
+        )
+        floor_body.collision = floor_geometry_with_texture
+        floor_body.visual = floor_geometry_with_texture
+
+        return floor_body
+
+    def create_in_world(self, world: World, directory_path: Path, parent: Body) -> Body:
+        self._create_floor(world, directory_path, parent)
+
+        # create walls
+        for wall in self.walls:
+            wall_annotation = wall.create_in_world(world, directory_path, parent)
+            doors_of_this_wall = [
+                door for door in self.doors if door.wall_id == wall.id
+            ]  # join doors on this wall
+
+            # create doors
+            for door in doors_of_this_wall:
+                door.create_in_world(world, directory_path, wall_annotation.root)
+
+        # create the objects
+        for sage_object in tqdm.tqdm(self.objects, desc=f"Parsing objects"):
+            sage_object.create_in_world(world, directory_path, parent=parent)
+
+        return world.root
+
+    def to_json(self) -> Dict[str, Any]:
+        """
+        Serialize to JSON.
+        """
+        return {
+            JSON_TYPE_NAME: get_full_class_name(self.__class__),
+            "id": self.id,
+            "room_type": self.room_type,
+            "dimensions": to_json(self.dimensions),
+            "position": to_json(self.position),
+            "floor_material": self.floor_material,
+            "objects": to_json(self.objects),
+            "walls": to_json(self.walls),
+            "doors": to_json(self.doors),
+        }
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Sage10kRoom:
+        """
+        Deserialize from JSON.
+        """
+        return cls(
+            id=data["id"],
+            room_type=data["room_type"],
+            dimensions=Sage10kSize._from_json(data["dimensions"], **kwargs),
+            position=Sage10kPosition._from_json(data["position"], **kwargs),
+            floor_material=data["floor_material"],
+            objects=[Sage10kObject._from_json(d, **kwargs) for d in data["objects"]],
+            walls=[Sage10kWall._from_json(w, **kwargs) for w in data["walls"]],
+            doors=[Sage10kDoor._from_json(d, **kwargs) for d in data["doors"]],
         )
 
 
