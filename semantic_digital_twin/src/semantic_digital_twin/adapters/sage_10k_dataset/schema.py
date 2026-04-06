@@ -792,6 +792,32 @@ class Sage10kRoom(Sage10kWithID):
                     world, directory, wall_annotation.root, wall, wall_annotation
                 )
 
+            # After all doors are added and the mesh is modified, re-project UVs and set texture
+            wall_length, _ = wall.wall_length_and_yaw
+            body = wall_annotation.root
+            wall_mesh = body.collision.combined_mesh
+
+            wall_mesh = Mesh.project_uv(
+                mesh=wall_mesh,
+                projection_axis=np.array([1, 0, 0]),
+                scale=np.array([wall.thickness, wall_length, wall.height]),
+            )
+
+            geometry_with_texture = ShapeCollection(
+                [
+                    Mesh.from_trimesh(
+                        origin=HomogeneousTransformationMatrix(reference_frame=body),
+                        mesh=wall_mesh,
+                        texture_file_path=str(
+                            directory / "materials" / f"{wall.material}.png"
+                        ),
+                    )
+                ],
+                reference_frame=body,
+            )
+            body.collision = geometry_with_texture
+            body.visual = geometry_with_texture
+
         # create the objects
         for sage_object in self.objects:
             sage_object.create_in_world(world, directory, parent=parent)
