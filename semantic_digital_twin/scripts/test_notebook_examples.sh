@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export AMENT_TRACE_SETUP_FILES="${AMENT_TRACE_SETUP_FILES:-}"
 source /opt/ros/jazzy/setup.bash
 
 # Determine the directory of this script and change to the examples directory relative to it
