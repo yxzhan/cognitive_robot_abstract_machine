@@ -59,8 +59,8 @@ jobs:
           BAZEL_VERSION=7.0.0
           curl -L -o bazel.sh \
             https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-installer-linux-x86_64.sh
-          chmod +x bazel.sh
-          ./bazel.sh --user
+          chmod +x bazel-version-installer-linux-x86_64.sh
+          ./bazel-version-installer-linux-x86_64.sh --user
           echo "$HOME/bin" >> $GITHUB_PATH
           
           bazel build //test:test_all
