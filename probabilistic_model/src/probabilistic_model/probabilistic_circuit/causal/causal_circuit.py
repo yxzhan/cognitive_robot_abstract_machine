@@ -11,6 +11,7 @@ from scipy.special import logsumexp
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent, Event
 from random_events.variable import Variable
+from tabulate import tabulate
 
 
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
@@ -18,8 +19,6 @@ from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
     ProductUnit,
     SumUnit,
 )
-
-from tabulate import tabulate
 
 
 from probabilistic_model.probabilistic_circuit.causal.exceptions import (
