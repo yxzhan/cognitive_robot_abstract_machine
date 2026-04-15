@@ -1,10 +1,14 @@
-import os
-from dataclasses import dataclass, field
-
 import logging
+import os
+import subprocess
+import sys
+from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
-import mujoco
+from typing import Set
 from xml.etree import ElementTree as ET
+
+import jinja2
 
 from semantic_digital_twin.adapters.package_resolver import FileUriResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
@@ -24,12 +28,14 @@ SAPIEN_ACCESS_TOKEN_ENVIRONMENT_VARIABLE_NAME = "SAPIEN_ACCESS_TOKEN"
 
 
 @dataclass
-class PartnetMobilityDatasetLoader:
+class PartNetMobilityDatasetLoader:
     """
-    Loader for articulated assets from the partnet mobility dataset (https://sapien.ucsd.edu/browse).
+    Loader for articulated assets from the PartNet-Mobility dataset (https://sapien.ucsd.edu/browse).
 
     For this to work out of the box, the environment variable SAPIEN_ACCESS_TOKEN must be set
     and you have to install sapien.
+
+    The URDF files provided by sapien are missing some information. This loader also adds the missing information.
     """
 
     token: str = field(
@@ -48,6 +54,16 @@ class PartnetMobilityDatasetLoader:
     The directory where to save the downloaded URDF files into.
     """
 
+    default_effort_for_limit_tags: float = 100.0
+    """
+    The default effort value to use for limit tags in the URDF files.
+    """
+
+    default_velocity_for_limit_tags: float = 100.0
+    """
+    The default velocity value to use for limit tags in the URDF files.
+    """
+
     def load(self, model_id: int = 179) -> World:
         """
         Load a world given the model id.
@@ -58,15 +74,98 @@ class PartnetMobilityDatasetLoader:
         urdf_file = sapien.asset.download_partnet_mobility(
             model_id=model_id, token=self.token, directory=self.directory
         )
-        mj_root = ET.parse(urdf_file).getroot()
-        # mujoco_element = ET.SubElement(mj_root, "mujoco")
-        # compiler_element = ET.SubElement(mujoco_element, "compiler")
-        # compiler_element.set("angle", "radian")
-        # compiler_element.set("meshdir", "textured_objs")
-        mj_string = ET.tostring(mj_root, encoding="unicode")
-        mj_spec = mujoco.MjSpec.from_string(mj_string)
-        print(mj_spec.to_xml())
-        world = URDFParser.from_file(file_path=urdf_file).parse()
+        self._add_missing_information_to_limit_tags(file_path=urdf_file)
+        world = URDFParser.from_file(
+            file_path=urdf_file,
+            path_resolver=FileUriResolver(
+                base_directory=self.directory / str(model_id)
+            ),
+        ).parse()
         return world
 
-    def _add_effort_to_limit_tags(self, file_path: str, effort: float = 100.0):
+    def _add_missing_information_to_limit_tags(self, file_path: str):
+        """
+        Add the missing information to all limit tags in a URDF file.
+
+        :param file_path: Path to the URDF file.
+        """
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+        for limit in root.findall(".//limit"):
+            limit.set("effort", str(self.default_effort_for_limit_tags))
+            limit.set("velocity", str(self.default_velocity_for_limit_tags))
+        tree.write(file_path)
+
+    def _create_python_file_with_semantic_annotations_from_dataset(self):
+
+        labels = defaultdict(set)  # a dict of class names to sets of labels
+
+        # collect all labels from all semantics.txt files
+        for directory in self.directory.glob("*"):
+            semantics_file = directory / "semantics.txt"
+
+            with semantics_file.open("r") as f:
+                lines = f.readlines()
+
+            for line in lines:
+                _, _, label = line.strip().split(" ")
+                labels[self.class_name_from_label(label)].add(label)
+
+        # generate class descriptions
+        class_descriptions = [
+            PartNetLabelClassDescription(class_name=class_name, labels=labels)
+            for class_name, labels in labels.items()
+        ]
+
+        # generate the semantic annotations file
+        package_directory = os.path.join(os.path.dirname(__file__))
+        env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(package_directory),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+
+        # Load the template
+        template = env.get_template("partnet_annotations_template.jinja")
+
+        # Render the template
+        output = template.render(
+            class_descriptions=class_descriptions,
+        )
+
+        with open(
+            os.path.join(package_directory, "generated_semantic_annotations.py"), "w"
+        ) as f:
+
+            # Write the output to the file
+            f.write(output)
+
+        # format the output with black
+        command = [sys.executable, "-m", "black", str(f.name)]
+        subprocess.run(command, capture_output=True, text=True, check=True)
+
+    @classmethod
+    def class_name_from_label(cls, label: str) -> str:
+        # remove _body
+        label = label.replace("_body", "")
+
+        # convert to upper camel case
+        label = label.title().replace("_", "")
+        return label
+
+
+@dataclass
+class PartNetLabelClassDescription:
+    """
+    Class description for a PartNet label.
+    """
+
+    class_name: str
+    """
+    Class name of the label.
+    """
+
+    labels: Set[str]
+    """
+    Set of labels for the class.
+    """
