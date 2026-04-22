@@ -43,8 +43,6 @@ from pycram.robot_plans.actions.core.pick_up import PickUpAction
 
 from semantic_digital_twin.datastructures.definitions import TorsoState
 
-from semantic_digital_twin.testing import pr2_world
-
 
 def verify_scene(world: World, scene: Sage10kScene):
     """
@@ -155,8 +153,8 @@ def test_loader(rclpy_node, sage10k_scene):
     verify_scene(world, scene)
 
 @pytest.mark.skipif(get_sage10k_scene() is None, reason="Sage10k dataset not available")
-def test_loader_with_robot(rclpy_node, sage10k_scene, pr2_world_setup):
-    pr2_world = pr2_world_setup
+def test_loader_with_robot(rclpy_node, sage10k_scene, pr2_world_copy):
+    pr2_world = pr2_world_copy
 
     try:
         loader = Sage10kDatasetLoader()
@@ -211,7 +209,7 @@ def test_loader_with_robot(rclpy_node, sage10k_scene, pr2_world_setup):
     with simulated_robot:
         root.perform()
     assert (
-            pr2_world_setup.get_connection(
+            pr2_world.get_connection(
                 left_arm.manipulator.tool_frame,
                 target_body,
             )
