@@ -57,7 +57,7 @@ logger.setLevel(logging.DEBUG)
 
 headless = os.environ.get("CI", "false").lower() == "true"
 only_run_test_in_CI = os.environ.get("CI", "false").lower() == "false"
-# only_run_test_in_CI = False
+only_run_test_in_CI = False
 
 pytestmark = pytest.mark.skipif(
     only_run_test_in_CI,
@@ -473,5 +473,83 @@ def test_spawn_body_with_connections():
         }
 
         multi_sim.stop_simulation()
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def test_world_sim_state_sync():
+    world = World()
+    multi_sim = MujocoSim(world=world, headless=headless, step_size=STEP_SIZE)
+    multi_sim.start_simulation()
+    time.sleep(1)
+
+    plane_half_thickness = 0.05
+    box_half_size = 0.1
+    initial_box_z = 5.0
+    target_x = 0.3
+
+    try:
+        plane_body = Body(name=PrefixedName("ground_plane"))
+        plane_shape = Box(
+            origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+                reference_frame=plane_body
+            ),
+            scale=Scale(2.0, 2.0, plane_half_thickness * 2),
+            color=Color(1.0, 1.0, 0.0, 1.0),
+        )
+        plane_body.collision = ShapeCollection([plane_shape], reference_frame=plane_body)
+
+        falling_box = Body(name=PrefixedName("falling_box"))
+        box_shape = Box(
+            origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+                reference_frame=falling_box
+            ),
+            scale=Scale(box_half_size * 2, box_half_size * 2, box_half_size * 2),
+            color=Color(1.0, 0.0, 0.0, 1.0),
+        )
+        falling_box.collision = ShapeCollection([box_shape], reference_frame=falling_box)
+
+        with world.modify_world():
+            world.add_connection(
+                FixedConnection(parent=world.root, child=plane_body)
+            )
+            box_connection = Connection6DoF.create_with_dofs(
+                world=world,
+                parent=world.root,
+                child=falling_box,
+            )
+            world.add_connection(box_connection)
+
+        body_names = multi_sim.simulator.get_all_body_names().result
+        assert "ground_plane" in body_names
+        assert "falling_box" in body_names
+
+        time.sleep(1.5)
+
+        box_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=target_x,
+            z=initial_box_z,
+            reference_frame=falling_box,
+        )
+        time.sleep(2.5)
+
+        final_x = float(
+            multi_sim.simulator.get_body_position("falling_box").result[0]
+        )
+        final_z = float(
+            multi_sim.simulator.get_body_position("falling_box").result[2]
+        )
+
+        multi_sim.stop_simulation()
+
+        assert final_x == pytest.approx(target_x, abs=1e-1), (
+            f"Box did not move to commanded x: final_x={final_x}, "
+            f"expected≈{target_x}"
+        )
+        expected_resting_z = plane_half_thickness + box_half_size
+        assert final_z == pytest.approx(expected_resting_z, abs=5e-2), (
+            f"Box did not settle on the plane: final_z={final_z}, "
+            f"expected≈{expected_resting_z}"
+        )
     finally:
         stop_multisim_if_running(multi_sim)

@@ -2,6 +2,7 @@ import logging
 import inspect
 import os
 import shutil
+import time
 import trimesh
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -22,13 +23,14 @@ from krrood.utils import recursive_subclasses
 from scipy.spatial.transform import Rotation
 from trimesh.visual import TextureVisuals
 
-from ..callbacks.callback import ModelChangeCallback
+from ..callbacks.callback import ModelChangeCallback, StateChangeCallback
 from ..datastructures.prefixed_name import PrefixedName
 from ..spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
     Point3,
     Quaternion,
 )
+from ..spatial_types.math import inverse_frame
 from ..world import World
 from ..world_description.connections import (
     RevoluteConnection,
@@ -1331,7 +1333,7 @@ class MultiSimBuilder(ABC):
         if len(self.world.bodies) == 0:
             with self.world.modify_world():
                 self.world.add_body(root)
-        elif self.world.root != root:
+        elif self.world.root.name != root.name:
             # search for all Connection6DoF joints that are connected to the non "world" root
             # to change their parent to the new "world" root later.
             # Mujoco identifies all Connection6DoF joints as free joints.
@@ -2352,10 +2354,32 @@ class MujocoActuatorSpawner(MujocoEntitySpawner, ActuatorSpawner):
 
 
 @dataclass(eq=False)
+class _MultiSimStateCallback(StateChangeCallback):
+    """
+    Sibling callback owned by a :class:`MultiSimSynchronizer`. Forwards
+    world-state-change notifications to the synchronizer so it can push the
+    new world state into its simulator.
+    """
+
+    synchronizer: Optional["MultiSimSynchronizer"] = field(default=None, kw_only=True)
+
+    def _notify(self, **kwargs):
+        if self.synchronizer is None:
+            return
+        self.synchronizer._on_state_change()
+
+
+@dataclass(eq=False)
 class MultiSimSynchronizer(ModelChangeCallback, ABC):
     """
     A callback to synchronize the world model with the simulator.
-    This callback will listen to the world model changes and update the simulator accordingly.
+
+    Listens to world *model* changes (entity/connection/actuator additions)
+    via the :class:`ModelChangeCallback` base and spawns the matching entities
+    in the simulator. In addition, a sibling :class:`_MultiSimStateCallback`
+    is created in ``__post_init__`` that listens to world *state* changes and
+    routes them to :meth:`_on_state_change` so concrete synchronizers can
+    push the new state into the simulator (the *world → sim* direction).
     """
 
     simulator: BaseSimulator = field(kw_only=True)
@@ -2373,6 +2397,20 @@ class MultiSimSynchronizer(ModelChangeCallback, ABC):
     The spawner to spawn WorldEntity, Shape, and Connection objects in the simulator.
     """
 
+    _state_callback: Optional[_MultiSimStateCallback] = field(
+        init=False, default=None, repr=False
+    )
+    """
+    Sibling state-change callback registered in ``world.state.state_change_callbacks``.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+        self._state_callback = _MultiSimStateCallback(
+            _world=self._world,
+            synchronizer=self,
+        )
+
     def _notify(self, **kwargs):
         for modification in self._world._model_manager.model_modification_blocks[-1]:
             if isinstance(modification, AddKinematicStructureEntityModification):
@@ -2386,7 +2424,24 @@ class MultiSimSynchronizer(ModelChangeCallback, ABC):
                 self.entity_spawner.spawn(simulator=self.simulator, entity=entity)
 
     def stop(self):
-        self._world._model_manager.model_change_callbacks.remove(self)
+        if self._state_callback is not None:
+            self._state_callback.stop()
+            self._state_callback = None
+        try:
+            self._world._model_manager.model_change_callbacks.remove(self)
+        except ValueError:
+            pass
+
+    @abstractmethod
+    def _on_state_change(self) -> None:
+        """
+        Push the current ``world.state`` into the backing simulator.
+
+        Called from the thread that mutated ``world.state`` (typically the
+        user thread). Concrete subclasses implement the simulator-specific
+        write path.
+        """
+        raise NotImplementedError
 
 
 @dataclass(eq=False)
@@ -2394,6 +2449,193 @@ class MujocoSynchronizer(MultiSimSynchronizer):
     simulator: MujocoSimulator
     entity_converter: Type[EntityConverter] = field(default=MujocoConverter)
     entity_spawner: Type[EntitySpawner] = field(default=MujocoEntitySpawner)
+
+    sync_rate_hz: float = 30
+    """
+    Rate at which the *sim → world* direction pulls ``_mj_data`` back into
+    ``world.state`` from the physics thread. Set ``<= 0`` to disable.
+    """
+
+    _last_sync_time: float = field(init=False, default=0.0, repr=False)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.simulator.read_data_from_simulator = self._sim_to_world
+
+    def _sim_to_world(self) -> None:
+        """
+        Copy ``_mj_data.qpos`` back into ``world.state``.
+
+        Called by :meth:`physics_simulators.base_simulator.BaseSimulator.step`
+        on the physics thread after every ``mj_step``. Throttled to
+        ``sync_rate_hz`` wall-clock Hz. The sibling state-change callback is
+        paused across the write so our own ``notify_state_change`` does not
+        echo back into :meth:`_on_state_change`.
+        """
+        if self.sync_rate_hz <= 0:
+            return
+        now = time.monotonic()
+        if now - self._last_sync_time < 1.0 / self.sync_rate_hz:
+            return
+        self._last_sync_time = now
+
+        mj_model = self.simulator._mj_model
+        mj_data = self.simulator._mj_data
+        state = self._world.state
+        changed = False
+
+        self._state_callback.pause()
+        try:
+            for connection in self._world.connections:
+                if isinstance(connection, FixedConnection):
+                    continue
+                joint_id = mujoco.mj_name2id(
+                    mj_model, mujoco.mjtObj.mjOBJ_JOINT, connection.name.name
+                )
+                if joint_id == -1:
+                    continue
+                qpos_adr = mj_model.jnt_qposadr[joint_id]
+
+                if isinstance(connection, Connection6DoF):
+                    xyz = mj_data.qpos[qpos_adr : qpos_adr + 3]
+                    qwxyz = mj_data.qpos[qpos_adr + 3 : qpos_adr + 7]
+
+                    mj_T_world = numpy.eye(4)
+                    mj_T_world[:3, 3] = xyz
+                    mj_T_world[:3, :3] = Rotation.from_quat(
+                        [qwxyz[1], qwxyz[2], qwxyz[3], qwxyz[0]]
+                    ).as_matrix()
+
+                    parent_T_conn = (
+                        connection.parent_T_connection_expression.to_np()
+                    )
+                    conn_T_child = inverse_frame(parent_T_conn) @ mj_T_world
+
+                    dof_xyz = conn_T_child[:3, 3]
+                    dof_quat_xyzw = Rotation.from_matrix(
+                        conn_T_child[:3, :3]
+                    ).as_quat()
+
+                    state[connection.x_id].position = float(dof_xyz[0])
+                    state[connection.y_id].position = float(dof_xyz[1])
+                    state[connection.z_id].position = float(dof_xyz[2])
+                    state[connection.qw_id].position = float(dof_quat_xyzw[3])
+                    state[connection.qx_id].position = float(dof_quat_xyzw[0])
+                    state[connection.qy_id].position = float(dof_quat_xyzw[1])
+                    state[connection.qz_id].position = float(dof_quat_xyzw[2])
+                    changed = True
+                elif isinstance(connection, ActiveConnection1DOF):
+                    state[connection.raw_dof.id].position = float(
+                        mj_data.qpos[qpos_adr]
+                    )
+                    changed = True
+
+            if changed:
+                self._world.notify_state_change()
+                self._state_callback.update_previous_world_state()
+        finally:
+            self._state_callback.resume()
+
+    def _on_state_change(self) -> None:
+        """
+        Push ``world.state`` into ``_mj_data.qpos`` for every connection whose
+        DoF values changed since the last notification. Only non-fixed
+        connections that resolve to a MuJoCo joint are pushed.
+        """
+        positions = self._world.state.positions
+        previous = self._state_callback.previous_world_state_data
+
+        if len(positions) != len(previous):
+            # Model shape changed since the last notification (e.g. a spawn
+            # just added DoFs). The spawner already wrote the initial qpos
+            # for the new entities; just rebase the diff and return.
+            self._state_callback.update_previous_world_state()
+            return
+
+        mj_model = self.simulator._mj_model
+        mj_data = self.simulator._mj_data
+        state_index = self._world.state._index
+
+        for connection in self._world.connections:
+            if isinstance(connection, FixedConnection):
+                continue
+            joint_id = mujoco.mj_name2id(
+                mj_model, mujoco.mjtObj.mjOBJ_JOINT, connection.name.name
+            )
+            if joint_id == -1:
+                continue
+            qpos_adr = mj_model.jnt_qposadr[joint_id]
+
+            if isinstance(connection, Connection6DoF):
+                try:
+                    ix = state_index[connection.x_id]
+                    iy = state_index[connection.y_id]
+                    iz = state_index[connection.z_id]
+                    iqx = state_index[connection.qx_id]
+                    iqy = state_index[connection.qy_id]
+                    iqz = state_index[connection.qz_id]
+                    iqw = state_index[connection.qw_id]
+                except KeyError:
+                    continue
+                if not (
+                    positions[ix] != previous[ix]
+                    or positions[iy] != previous[iy]
+                    or positions[iz] != previous[iz]
+                    or positions[iqx] != previous[iqx]
+                    or positions[iqy] != previous[iqy]
+                    or positions[iqz] != previous[iqz]
+                    or positions[iqw] != previous[iqw]
+                ):
+                    continue
+
+                conn_T_child = numpy.eye(4)
+                conn_T_child[:3, 3] = [
+                    positions[ix],
+                    positions[iy],
+                    positions[iz],
+                ]
+                conn_T_child[:3, :3] = Rotation.from_quat(
+                    [
+                        positions[iqx],
+                        positions[iqy],
+                        positions[iqz],
+                        positions[iqw],
+                    ]
+                ).as_matrix()
+
+                parent_T_conn = (
+                    connection.parent_T_connection_expression.to_np()
+                )
+                mj_T_world = parent_T_conn @ conn_T_child
+                mj_xyz = mj_T_world[:3, 3]
+                mj_quat_xyzw = Rotation.from_matrix(
+                    mj_T_world[:3, :3]
+                ).as_quat()
+
+                mj_data.qpos[qpos_adr + 0] = mj_xyz[0]
+                mj_data.qpos[qpos_adr + 1] = mj_xyz[1]
+                mj_data.qpos[qpos_adr + 2] = mj_xyz[2]
+                mj_data.qpos[qpos_adr + 3] = mj_quat_xyzw[3]
+                mj_data.qpos[qpos_adr + 4] = mj_quat_xyzw[0]
+                mj_data.qpos[qpos_adr + 5] = mj_quat_xyzw[1]
+                mj_data.qpos[qpos_adr + 6] = mj_quat_xyzw[2]
+            elif isinstance(connection, ActiveConnection1DOF):
+                try:
+                    idx = state_index[connection.raw_dof.id]
+                except KeyError:
+                    continue
+                if positions[idx] == previous[idx]:
+                    continue
+                mj_data.qpos[qpos_adr] = positions[idx]
+
+        self._state_callback.update_previous_world_state()
+
+    def stop(self):
+        try:
+            del self.simulator.read_data_from_simulator
+        except AttributeError:
+            pass
+        super().stop()
 
 
 class MultiSim(ABC):
