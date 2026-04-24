@@ -2427,10 +2427,7 @@ class MultiSimSynchronizer(ModelChangeCallback, ABC):
         if self._state_callback is not None:
             self._state_callback.stop()
             self._state_callback = None
-        try:
-            self._world._model_manager.model_change_callbacks.remove(self)
-        except ValueError:
-            pass
+        self._world._model_manager.model_change_callbacks.remove(self)
 
     @abstractmethod
     def _on_state_change(self) -> None:
@@ -2474,7 +2471,7 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         """
         if self.sync_rate_hz <= 0:
             return
-        now = time.monotonic()
+        now = time.time()
         if now - self._last_sync_time < 1.0 / self.sync_rate_hz:
             return
         self._last_sync_time = now
@@ -2483,58 +2480,63 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         mj_data = self.simulator._mj_data
         state = self._world.state
         changed = False
-
         self._state_callback.pause()
-        try:
-            for connection in self._world.connections:
-                if isinstance(connection, FixedConnection):
-                    continue
-                joint_id = mujoco.mj_name2id(
-                    mj_model, mujoco.mjtObj.mjOBJ_JOINT, connection.name.name
+
+        for connection in self._world.connections:
+            if isinstance(connection, FixedConnection):
+                continue
+            joint_id = mujoco.mj_name2id(
+                mj_model, mujoco.mjtObj.mjOBJ_JOINT, connection.name.name
+            )
+            if joint_id == -1:
+                continue
+            qpos_adr = mj_model.jnt_qposadr[joint_id]
+
+            if isinstance(connection, Connection6DoF):
+                xyz = mj_data.qpos[qpos_adr : qpos_adr + 3]
+                qwxyz = mj_data.qpos[qpos_adr + 3 : qpos_adr + 7]
+
+                mj_T_world = numpy.eye(4)
+                mj_T_world[:3, 3] = xyz
+                mj_T_world[:3, :3] = Rotation.from_quat(
+                    qwxyz.tolist(), scalar_first=True
+                ).as_matrix()
+
+                parent_T_conn = (
+                    connection.parent_T_connection_expression.to_np()
                 )
-                if joint_id == -1:
-                    continue
-                qpos_adr = mj_model.jnt_qposadr[joint_id]
+                conn_T_child = inverse_frame(parent_T_conn) @ mj_T_world
 
-                if isinstance(connection, Connection6DoF):
-                    xyz = mj_data.qpos[qpos_adr : qpos_adr + 3]
-                    qwxyz = mj_data.qpos[qpos_adr + 3 : qpos_adr + 7]
+                dof_xyz = conn_T_child[:3, 3]
+                dof_quat_xyzw = Rotation.from_matrix(
+                    conn_T_child[:3, :3]
+                ).as_quat()
 
-                    mj_T_world = numpy.eye(4)
-                    mj_T_world[:3, 3] = xyz
-                    mj_T_world[:3, :3] = Rotation.from_quat(
-                        [qwxyz[1], qwxyz[2], qwxyz[3], qwxyz[0]]
-                    ).as_matrix()
+                state[connection.x_id].position = float(dof_xyz[0])
+                state[connection.y_id].position = float(dof_xyz[1])
+                state[connection.z_id].position = float(dof_xyz[2])
+                state[connection.qw_id].position = float(dof_quat_xyzw[3])
+                state[connection.qx_id].position = float(dof_quat_xyzw[0])
+                state[connection.qy_id].position = float(dof_quat_xyzw[1])
+                state[connection.qz_id].position = float(dof_quat_xyzw[2])
+                changed = True
+            elif isinstance(connection, ActiveConnection1DOF):
+                state[connection.raw_dof.id].position = float(
+                    mj_data.qpos[qpos_adr]
+                )
+                changed = True
+            else:
+                logger.warning(
+                    "sim→world sync: unsupported connection type %s for "
+                    "joint %s; skipping",
+                    type(connection).__name__,
+                    connection.name.name,
+                )
 
-                    parent_T_conn = (
-                        connection.parent_T_connection_expression.to_np()
-                    )
-                    conn_T_child = inverse_frame(parent_T_conn) @ mj_T_world
-
-                    dof_xyz = conn_T_child[:3, 3]
-                    dof_quat_xyzw = Rotation.from_matrix(
-                        conn_T_child[:3, :3]
-                    ).as_quat()
-
-                    state[connection.x_id].position = float(dof_xyz[0])
-                    state[connection.y_id].position = float(dof_xyz[1])
-                    state[connection.z_id].position = float(dof_xyz[2])
-                    state[connection.qw_id].position = float(dof_quat_xyzw[3])
-                    state[connection.qx_id].position = float(dof_quat_xyzw[0])
-                    state[connection.qy_id].position = float(dof_quat_xyzw[1])
-                    state[connection.qz_id].position = float(dof_quat_xyzw[2])
-                    changed = True
-                elif isinstance(connection, ActiveConnection1DOF):
-                    state[connection.raw_dof.id].position = float(
-                        mj_data.qpos[qpos_adr]
-                    )
-                    changed = True
-
-            if changed:
-                self._world.notify_state_change()
-                self._state_callback.update_previous_world_state()
-        finally:
-            self._state_callback.resume()
+        if changed:
+            self._world.notify_state_change()
+            self._state_callback.update_previous_world_state()
+        self._state_callback.resume()
 
     def _on_state_change(self) -> None:
         """
@@ -2543,9 +2545,9 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         connections that resolve to a MuJoCo joint are pushed.
         """
         positions = self._world.state.positions
-        previous = self._state_callback.previous_world_state_data
+        previous_positions = self._state_callback.previous_world_state_data
 
-        if len(positions) != len(previous):
+        if len(positions) != len(previous_positions):
             # Model shape changed since the last notification (e.g. a spawn
             # just added DoFs). The spawner already wrote the initial qpos
             # for the new entities; just rebase the diff and return.
@@ -2567,24 +2569,28 @@ class MujocoSynchronizer(MultiSimSynchronizer):
             qpos_adr = mj_model.jnt_qposadr[joint_id]
 
             if isinstance(connection, Connection6DoF):
-                try:
-                    ix = state_index[connection.x_id]
-                    iy = state_index[connection.y_id]
-                    iz = state_index[connection.z_id]
-                    iqx = state_index[connection.qx_id]
-                    iqy = state_index[connection.qy_id]
-                    iqz = state_index[connection.qz_id]
-                    iqw = state_index[connection.qw_id]
-                except KeyError:
+                if connection.x_id not in state_index:
+                    logger.warning(
+                        "world→sim sync: 6DoF connection %s has DoFs not "
+                        "registered in world.state (x_id=%s); skipping",
+                        connection.name.name,
+                        connection.x_id,
+                    )
                     continue
-                if not (
-                    positions[ix] != previous[ix]
-                    or positions[iy] != previous[iy]
-                    or positions[iz] != previous[iz]
-                    or positions[iqx] != previous[iqx]
-                    or positions[iqy] != previous[iqy]
-                    or positions[iqz] != previous[iqz]
-                    or positions[iqw] != previous[iqw]
+                ix = state_index[connection.x_id]
+                iy = state_index[connection.y_id]
+                iz = state_index[connection.z_id]
+                iqx = state_index[connection.qx_id]
+                iqy = state_index[connection.qy_id]
+                iqz = state_index[connection.qz_id]
+                iqw = state_index[connection.qw_id]
+
+                dof_indices = [ix, iy, iz, iqx, iqy, iqz, iqw]
+                if numpy.allclose(
+                    positions[dof_indices],
+                    previous_positions[dof_indices],
+                    atol=1e-4, 
+                    rtol=1e-4
                 ):
                     continue
 
@@ -2620,21 +2626,32 @@ class MujocoSynchronizer(MultiSimSynchronizer):
                 mj_data.qpos[qpos_adr + 5] = mj_quat_xyzw[1]
                 mj_data.qpos[qpos_adr + 6] = mj_quat_xyzw[2]
             elif isinstance(connection, ActiveConnection1DOF):
-                try:
-                    idx = state_index[connection.raw_dof.id]
-                except KeyError:
+                dof_id = connection.raw_dof.id
+                if dof_id not in state_index:
+                    logger.warning(
+                        "world→sim sync: 1DoF connection %s has DoF not "
+                        "registered in world.state (dof_id=%s); skipping",
+                        connection.name.name,
+                        dof_id,
+                    )
                     continue
-                if positions[idx] == previous[idx]:
+                idx = state_index[dof_id]
+                if positions[idx] == previous_positions[idx]:
                     continue
                 mj_data.qpos[qpos_adr] = positions[idx]
+            else:
+                logger.warning(
+                    "world→sim sync: unsupported connection type %s for "
+                    "joint %s; skipping",
+                    type(connection).__name__,
+                    connection.name.name,
+                )
 
         self._state_callback.update_previous_world_state()
 
     def stop(self):
-        try:
+        if "read_data_from_simulator" in self.simulator.__dict__:
             del self.simulator.read_data_from_simulator
-        except AttributeError:
-            pass
         super().stop()
 
 
