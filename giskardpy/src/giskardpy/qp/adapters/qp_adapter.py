@@ -147,7 +147,7 @@ class QPDataSymbolic:
             matrix = strategy.create_matrix(constraints)
             slack_matrix = strategy.create_slack_matrix(constraints)
             bounds = strategy.create_bounds(
-                [c.bound.bound for c in constraints],
+                [c.bound for c in constraints],
                 [c.normalization_factor for c in constraints],
             )
             eq_matrix_dofs.append(matrix)
@@ -171,11 +171,11 @@ class QPDataSymbolic:
             matrix = strategy.create_matrix(constraints)
             slack_matrix = strategy.create_slack_matrix(constraints)
             lower_bound = strategy.create_bounds(
-                [c.bound.lower_bound for c in constraints],
+                [c.lower_bound for c in constraints],
                 [c.normalization_factor for c in constraints],
             )
             upper_bound = strategy.create_bounds(
-                [c.bound.upper_bound for c in constraints],
+                [c.upper_bound for c in constraints],
                 [c.normalization_factor for c in constraints],
             )
             ineq_matrix_dofs.append(matrix)

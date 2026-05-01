@@ -16,9 +16,9 @@ from giskardpy.motion_statechart.exceptions import (
 )
 from giskardpy.qp.constraint import (
     GiskardConstraint,
-    EqualityBound,
+    GiskardEqualityConstraint,
+    GiskardInequalityConstraint,
     EnforcementStrategy,
-    InequalityBound,
     IntegralStrategy,
     VelocityStrategy,
 )
@@ -36,29 +36,33 @@ class ConstraintCollection:
 
     def get_equality_constraint_blocks(
         self,
-    ) -> dict[EnforcementStrategy, list[GiskardConstraint]]:
+    ) -> dict[EnforcementStrategy, list[GiskardEqualityConstraint]]:
         result = defaultdict(list)
         for c in self._constraints:
-            if isinstance(c.bound, EqualityBound):
+            if isinstance(c, GiskardEqualityConstraint):
                 result[c.enforcement_strategy].append(c)
         return result
 
     def get_inequality_constraint_blocks(
         self,
-    ) -> dict[EnforcementStrategy, list[GiskardConstraint]]:
+    ) -> dict[EnforcementStrategy, list[GiskardInequalityConstraint]]:
         result = defaultdict(list)
         for c in self._constraints:
-            if isinstance(c.bound, InequalityBound):
+            if isinstance(c, GiskardInequalityConstraint):
                 result[c.enforcement_strategy].append(c)
         return result
 
     @property
-    def equality_constraints(self) -> list[GiskardConstraint]:
-        return [c for c in self._constraints if isinstance(c.bound, EqualityBound)]
+    def equality_constraints(self) -> list[GiskardEqualityConstraint]:
+        return [
+            c for c in self._constraints if isinstance(c, GiskardEqualityConstraint)
+        ]
 
     @property
-    def inequality_constraints(self) -> list[GiskardConstraint]:
-        return [c for c in self._constraints if isinstance(c.bound, InequalityBound)]
+    def inequality_constraints(self) -> list[GiskardInequalityConstraint]:
+        return [
+            c for c in self._constraints if isinstance(c, GiskardInequalityConstraint)
+        ]
 
     def merge(self, name_prefix: str, other: ConstraintCollection):
         for constraint in other._constraints:
@@ -133,10 +137,10 @@ class ConstraintCollection:
         upper_slack_limit = (
             upper_slack_limit if upper_slack_limit is not None else float("inf")
         )
-        constraint = GiskardConstraint(
+        constraint = GiskardEqualityConstraint(
             name=name,
             expression=task_expression,
-            bound=EqualityBound(equality_bound),
+            bound=equality_bound,
             normalization_factor=reference_velocity,
             quadratic_weight=quadratic_weight,
             lower_slack_limit=lower_slack_limit,
@@ -183,7 +187,7 @@ class ConstraintCollection:
         upper_slack_limit = (
             upper_slack_limit if upper_slack_limit is not None else float("inf")
         )
-        constraint = GiskardConstraint(
+        constraint = GiskardInequalityConstraint(
             name=name,
             expression=task_expression,
             normalization_factor=reference_velocity,
@@ -192,7 +196,8 @@ class ConstraintCollection:
             upper_slack_limit=upper_slack_limit,
             linear_weight=linear_weight,
             enforcement_strategy=IntegralStrategy,
-            bound=InequalityBound(lower_error, upper_error),
+            lower_bound=lower_error,
+            upper_bound=upper_error,
         )
         self.add_constraint(constraint)
 
@@ -367,11 +372,12 @@ class ConstraintCollection:
         :param upper_slack_limit:
         """
 
-        constraint = GiskardConstraint(
+        constraint = GiskardInequalityConstraint(
             name=name,
             enforcement_strategy=VelocityStrategy,
             expression=task_expression,
-            bound=InequalityBound(lower_velocity_limit, upper_velocity_limit),
+            lower_bound=lower_velocity_limit,
+            upper_bound=upper_velocity_limit,
             quadratic_weight=quadratic_weight,
             normalization_factor=velocity_limit,
             lower_slack_limit=lower_slack_limit,
@@ -402,11 +408,11 @@ class ConstraintCollection:
         :param upper_slack_limit:
         """
 
-        constraint = GiskardConstraint(
+        constraint = GiskardEqualityConstraint(
             name=name,
             enforcement_strategy=VelocityStrategy,
             expression=task_expression,
-            bound=EqualityBound(velocity_goal),
+            bound=velocity_goal,
             quadratic_weight=quadratic_weight,
             normalization_factor=velocity_limit,
             lower_slack_limit=lower_slack_limit,

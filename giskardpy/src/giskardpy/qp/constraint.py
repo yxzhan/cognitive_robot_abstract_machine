@@ -43,21 +43,6 @@ class NormalizationFactors(FloatEnum):
     radian_per_second = 0.2
 
 
-@dataclass
-class Bound: ...
-
-
-@dataclass
-class EqualityBound(Bound):
-    bound: Scalar
-
-
-@dataclass
-class InequalityBound(Bound):
-    lower_bound: Scalar
-    upper_bound: Scalar
-
-
 def max_velocity_from_horizon_and_jerk_qp(
     prediction_horizon: int,
     vel_limit: float,
@@ -147,7 +132,9 @@ class SlackLimits(DirectLimits):
         normalization_number: float,
         control_horizon: int,
     ) -> Scalar:
-        return quadratic_weight * (1 / (normalization_number**2 * control_horizon))
+        return quadratic_weight * (
+            1 / (sm.Scalar(normalization_number) ** 2 * control_horizon)
+        )
 
 
 @dataclass
@@ -775,8 +762,8 @@ class VelocityStrategy(EnforcementStrategy):
 
     def normalized_weight(
         self, quadratic_weight: Scalar, normalization_factor
-    ) -> float:
-        return quadratic_weight * (1 / normalization_factor) ** 2
+    ) -> Scalar:
+        return quadratic_weight * (1 / sm.Scalar(normalization_factor)) ** 2
 
     def create_bounds(
         self, bounds: list[Scalar], normalization_numbers: list[float]
@@ -918,7 +905,7 @@ class SystemDynamicsStrategy(EnforcementStrategy):
 
 
 @dataclass
-class GiskardConstraint:
+class GiskardConstraint(ABC):
     """
     Defines a (slack-relaxed) constraint on expression for a quadratic program.
     """
@@ -926,8 +913,6 @@ class GiskardConstraint:
     name: str
 
     expression: Scalar
-
-    bound: Bound
 
     lower_slack_limit: sm.ScalarData
     upper_slack_limit: sm.ScalarData
@@ -950,3 +935,14 @@ class GiskardConstraint:
     """
 
     enforcement_strategy: type[EnforcementStrategy]
+
+
+@dataclass
+class GiskardEqualityConstraint(GiskardConstraint):
+    bound: Scalar
+
+
+@dataclass
+class GiskardInequalityConstraint(GiskardConstraint):
+    lower_bound: Scalar
+    upper_bound: Scalar
