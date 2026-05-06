@@ -362,18 +362,6 @@ class JoinManager:
 class EQLTranslator:
     """
     Translate an EQL query into an SQLAlchemy query.
-
-    Currently only supports queries built with entity(). Queries built
-    with set_of() are not yet supported.
-
-    This assumes the query has a structure like:
-    - quantifier (an/the)
-        - select like (entity, setof)
-            - Root Condition
-                - child 1
-                - child 2
-                - ...
-
     """
 
     eql_query: Query
@@ -456,9 +444,16 @@ class EQLTranslator:
         Translate logic for set_of() queries.
 
         Supports two cases:
-        1. Attribute variables: set_of(b.size, b.name) → SELECT size, name FROM BodyDAO
-        2. Entity variables: set_of(C, H, FC, PC).where(...) → SELECT C.*, H.*, FC.*, PC.*
-        with JOINs derived from the WHERE conditions
+        # Case 1: Attribute variables
+        b = variable(type_=Body, domain=[])
+        query = an(set_of(b.size, b.name))
+        # → SELECT size, name FROM BodyDAO
+
+        # Case 2: Entity variables
+        C = variable(Container, domain=world.bodies)
+        H = variable(Handle, domain=world.bodies)
+        query = an(set_of(C, H).where(C == FC.parent))
+        # → SELECT ContainerDAO.*, HandleDAO.* FROM ... JOIN ...
         """
         selected = self.select_like._selected_variables_
 
@@ -581,9 +576,9 @@ class EQLTranslator:
                 return self.translate_attribute(query)
             case Where():
                 return self.translate_query(query.condition)
-            case OrderedBy():
+            case ResultQuantifier():
                 return None
-            case ResultQuantifier() | Variable():
+            case Variable():
                 return None
             case _:
                 raise UnsupportedQueryTypeError(f"Unknown query type: {type(query)}")
@@ -712,41 +707,41 @@ class EQLTranslator:
 
         # Normalize: ensure right side is always the Attribute
         if isinstance(query.left, Attribute) and isinstance(query.right, Variable):
-            attr_side = query.left
-            var_side = query.right
+            attribute_side = query.left
+            variable_side = query.right
         elif isinstance(query.left, Variable) and isinstance(query.right, Attribute):
-            attr_side = query.right
-            var_side = query.left
+            attribute_side = query.right
+            variable_side = query.left
         else:
-            attr_side = None
-            var_side = None
+            attribute_side = None
+            variable_side = None
 
-        if attr_side is not None:
-            attr_dao = resolver.extract_base_dao(attr_side)
-            var_dao = get_dao_class(var_side._type_)
+        if attribute_side is not None:
+            attribute_dao = resolver.extract_base_dao(attribute_side)
+            variable_dao = get_dao_class(variable_side._type_)
 
-            if attr_dao is None or var_dao is None:
+            if attribute_dao is None or variable_dao is None:
                 return None
 
-            attr_name = attr_side._attribute_name_
-            rel, fk = rel_resolver.resolve_relationship_and_foreign_key(attr_dao, attr_name)
+            attribute_name = attribute_side._attribute_name_
+            relationship, foreign_key = rel_resolver.resolve_relationship_and_foreign_key(attribute_dao, attribute_name)
 
-            if rel is None:
+            if relationship is None:
                 return None
 
-            var_pk = getattr(var_dao, "database_id", None)
-            if var_pk is None:
+            variable_primary_key = variable_dao.database_id
+            if variable_primary_key is None:
                 return None
 
-            if not self.join_manager.is_table_joined(attr_dao):
-                onclause = fk == var_dao.database_id
-                self.sql_query = self.sql_query.join(attr_dao, onclause=onclause)
-                self.join_manager.add_table_join(attr_dao)
+            if not self.join_manager.is_table_joined(attribute_dao):
+                onclause = foreign_key == variable_dao.database_id
+                self.sql_query = self.sql_query.join(attribute_dao, onclause=onclause)
+                self.join_manager.add_table_join(attribute_dao)
                 return True
-            elif not self.join_manager.is_table_joined(var_dao):
-                onclause = fk == var_dao.database_id
-                self.sql_query = self.sql_query.join(var_dao, onclause=onclause)
-                self.join_manager.add_table_join(var_dao)
+            elif not self.join_manager.is_table_joined(variable_dao):
+                onclause = foreign_key == variable_dao.database_id
+                self.sql_query = self.sql_query.join(variable_dao, onclause=onclause)
+                self.join_manager.add_table_join(variable_dao)
                 return True
             else:
                 # Table already joined — add as WHERE condition instead
@@ -763,10 +758,10 @@ class EQLTranslator:
         left_attribute_name = query.left._attribute_name_
         right_attribute_name = query.right._attribute_name_
 
-        left_rel, left_fk = rel_resolver.resolve_relationship_and_foreign_key(
+        left_rel, left_foreign_key = rel_resolver.resolve_relationship_and_foreign_key(
             left_dao, left_attribute_name
         )
-        right_rel, right_fk = rel_resolver.resolve_relationship_and_foreign_key(
+        right_rel, right_foreign_key = rel_resolver.resolve_relationship_and_foreign_key(
             right_dao, right_attribute_name
         )
 
@@ -774,23 +769,24 @@ class EQLTranslator:
             return None
 
         if isinstance(self.select_like, Entity):
-            anchor_dao = get_dao_class(self.select_like.selected_variable._type_)
-            if anchor_dao is None:
+            # The DAO class of the variable being selected (the "main" table in the query)
+            selected_dao = get_dao_class(self.select_like.selected_variable._type_)
+            if selected_dao is None:
                 raise MissingDAOError("Selected variable has no DAO class")
-            if left_dao is anchor_dao:
-                target_dao, target_fk, anchor_fk = right_dao, right_fk, left_fk
+            if left_dao is selected_dao:
+                target_dao, target_foreign_key, source_foreign_key = right_dao, right_foreign_key, left_foreign_key
             else:
-                target_dao, target_fk, anchor_fk = left_dao, left_fk, right_fk
+                target_dao, target_foreign_key, source_foreign_key = left_dao, left_foreign_key, right_foreign_key
         else:
             if not self.join_manager.is_table_joined(left_dao):
-                target_dao, target_fk, anchor_fk = left_dao, left_fk, right_fk
+                target_dao, target_foreign_key, source_foreign_key = left_dao, left_foreign_key, right_foreign_key
             elif not self.join_manager.is_table_joined(right_dao):
-                target_dao, target_fk, anchor_fk = right_dao, right_fk, left_fk
+                target_dao, target_foreign_key, source_foreign_key = right_dao, right_foreign_key, left_foreign_key
             else:
                 return None
 
         if not self.join_manager.is_table_joined(target_dao):
-            onclause = target_fk == anchor_fk
+            onclause = target_foreign_key == source_foreign_key
             self.sql_query = self.sql_query.join(target_dao, onclause=onclause)
             self.join_manager.add_table_join(target_dao)
 
@@ -835,9 +831,9 @@ class EQLTranslator:
             return extractor.extract_from_literal(operand)
 
         if isinstance(operand, Variable):
-            var_dao = get_dao_class(operand._type_)
-            if var_dao is not None:
-                return var_dao.database_id
+            variable_dao = get_dao_class(operand._type_)
+            if variable_dao is not None:
+                return variable_dao.database_id
             extractor = DomainValueExtractor(self.session)
             return extractor.extract_from_variable(operand)
 
