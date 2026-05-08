@@ -19,7 +19,7 @@ from krrood.ormatic.data_access_objects.alternative_mappings import (
     T,
 )
 from krrood.symbol_graph.symbol_graph import Symbol
-from krrood_test.dataset.semantic_world_like_classes import Body
+from ..dataset.semantic_world_like_classes import Body
 
 
 # check that custom enums works
