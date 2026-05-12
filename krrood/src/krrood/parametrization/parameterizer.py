@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import types
 from dataclasses import dataclass, field
 from enum import Enum, EnumType
 from functools import cached_property
-from types import UnionType
+from types import UnionType, EllipsisType
 from typing import Dict, Optional, Tuple, List, Iterable, Union
 
 import numpy as np
@@ -144,16 +143,28 @@ class UnderspecifiedParameters:
         krrood_variable = attribute_match.assigned_variable
         type_ = self._process_attribute_match_type(krrood_variable._type_)
 
-        if isinstance(value, compatible_types) or isinstance(type_, compatible_types):
+        # value incompatible
+        if (
+            issubclass(type_, compatible_types)
+            and not isinstance(value, compatible_types)
+            and not isinstance(value, EllipsisType)
+        ):
+            raise TypeError(
+                f"The attribute type is {type_}, but the assigned value is of type {type(value)}."
+                f"Please enter a value of a valid type. Valid types are {type_} or Ellipsis"
+            )
+        #  value compatible
+        elif isinstance(value, compatible_types):
             result = {name: variable_from_name_and_type(name=name, type_=type(value))}
             self.conditioning_assignments_from_literal_values[result[name]] = value
             return result
-
-        if isinstance(value, types.EllipsisType) and not issubclass(
+        # value compatible but type is not leaf type, so Ellipsis was not allowed
+        elif isinstance(value, EllipsisType) and not issubclass(
             type_, compatible_types
         ):
             raise InvalidEllipsis(type_)
-        elif isinstance(value, types.EllipsisType):
+        # value compatible
+        elif isinstance(value, EllipsisType):
             return {name: variable_from_name_and_type(name=name, type_=type_)}
 
         return self._extract_variables_from_non_primitive_literal(attribute_match)
