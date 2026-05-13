@@ -1,6 +1,8 @@
 import logging
 import inspect
 import os
+from typing import Tuple
+
 import trimesh
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -35,6 +37,8 @@ from semantic_digital_twin.world_description.connections import (
     ActiveConnection1DOF,
     FixedConnection,
     Connection6DoF,
+    OmniDrive,
+    DifferentialDrive,
 )
 from semantic_digital_twin.world_description.geometry import (
     Box,
@@ -286,7 +290,10 @@ class KinematicStructureEntityConverter(EntityConverter, ABC):
         """
 
         kinematic_structure_entity_props = EntityConverter._convert(self, entity)
-        t = entity.parent_connection.parent_T_connection_expression @ entity.parent_connection.connection_T_child_expression
+        t = (
+            entity.parent_connection.parent_T_connection_expression
+            @ entity.parent_connection.connection_T_child_expression
+        )
         px, py, pz, qw, qx, qy, qz = cas_pose_to_list(t)
         kinematic_structure_entity_pos = [px, py, pz]
         kinematic_structure_entity_quat = [qw, qx, qy, qz]
@@ -1185,9 +1192,13 @@ class MujocoMeshConverter(MujocoGeomConverter, MeshConverter):
             if not os.path.isfile(texture_file_path):
                 texture_file_path = entity.mesh.visual.material.image.filename
             if not os.path.isfile(texture_file_path):
-                texture_file_path = entity.mesh.visual.material.image.info.get("file_path", "")
+                texture_file_path = entity.mesh.visual.material.image.info.get(
+                    "file_path", ""
+                )
             if not os.path.isfile(texture_file_path):
-                raise FileNotFoundError(f"Texture file not found for mesh. Checked paths: '{entity.mesh.visual.material.name}', '{entity.mesh.visual.material.image.filename}', '{entity.mesh.visual.material.image.info.get('file_path', '')}'")
+                raise FileNotFoundError(
+                    f"Texture file not found for mesh. Checked paths: '{entity.mesh.visual.material.name}', '{entity.mesh.visual.material.image.filename}', '{entity.mesh.visual.material.image.info.get('file_path', '')}'"
+                )
             shape_props["texture_file_path"] = texture_file_path
         return shape_props
 
@@ -1291,7 +1302,11 @@ class MujocoCameraConverter(CameraConverter, ABC):
     ) -> Dict[str, Any]:
         camera_props["mode"] = entity.mode
         if mujoco.mj_version() >= 3005000:
-            camera_props["proj"] = mujoco.mjtProjection.mjPROJ_ORTHOGRAPHIC if entity.orthographic else mujoco.mjtProjection.mjPROJ_PERSPECTIVE
+            camera_props["proj"] = (
+                mujoco.mjtProjection.mjPROJ_ORTHOGRAPHIC
+                if entity.orthographic
+                else mujoco.mjtProjection.mjPROJ_PERSPECTIVE
+            )
         else:
             camera_props["orthographic"] = entity.orthographic
         camera_props["fovy"] = entity.fovy
@@ -1316,6 +1331,17 @@ class MultiSimBuilder(ABC):
     _world: Optional[World] = None
     """
     The world to be built.
+    """
+
+    _ignore_connection_types: ClassVar[Tuple] = (
+        FixedConnection,
+        OmniDrive,
+        DifferentialDrive,
+    )
+    """
+    A list of connection types to ignore when building connections in the simulator.
+    FixedConnection is ignored because in MuJoCo, all bodies that are not connected by a joint are implicitly fixed to the parent body.
+    OmniDrive and DifferentialDrive are ignored because in MuJoCo, those are controlled by the degree of freedom of the freejoints.
     """
 
     def build_world(self, world: World, file_path: str):
@@ -1550,9 +1576,15 @@ class MujocoBuilder(MultiSimBuilder):
         qpos = []
         for body in self.world.bodies:
             parent_connection = body.parent_connection
-            if isinstance(parent_connection, FixedConnection) or parent_connection is None:
+            if parent_connection is None or isinstance(
+                parent_connection, self._ignore_connection_types
+            ):
                 continue
-            qpos += [self.world.state[dof.id].position for dof in parent_connection.active_dofs + parent_connection.passive_dofs]
+            qpos += [
+                self.world.state[dof.id].position
+                for dof in parent_connection.active_dofs
+                + parent_connection.passive_dofs
+            ]
         key_element.set("qpos", " ".join(map(str, qpos)))
         tree.write(file_path, encoding="utf-8", xml_declaration=True)
 
@@ -1684,7 +1716,7 @@ class MujocoBuilder(MultiSimBuilder):
         return True
 
     def _build_connection(self, connection: Connection):
-        if isinstance(connection, FixedConnection):
+        if isinstance(connection, self._ignore_connection_types):
             return
         joint_props = MujocoJointConverter.convert(connection)
         if "equality_joint" in joint_props:
