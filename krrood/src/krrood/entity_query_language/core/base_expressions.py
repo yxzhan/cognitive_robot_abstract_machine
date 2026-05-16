@@ -276,37 +276,40 @@ class SymbolicExpression(ABC):
         """
         previous_parent = self._eval_parent_
         self._eval_parent_ = parent
-        ctx = get_evaluation_context()
+        evaluation_context = get_evaluation_context()
         # Lazily create the evaluation context so that satisfaction tracking
         # and inference recording work even when _evaluate_ is called directly
         # (e.g. from tests or nested child evaluations).
-        owns_ctx = ctx is None
-        if owns_ctx:
-            ctx = EvaluationContext(
+        owns_an_evaluation_context = evaluation_context is None
+        if owns_an_evaluation_context:
+            evaluation_context = EvaluationContext(
                 observers=[EvaluationTracker(), SatisfiedConditionTracker(), InferenceRecorder()]
             )
-            set_evaluation_context(ctx)
+            set_evaluation_context(evaluation_context)
         try:
-            ctx.on_evaluate_enter(expression=self, sources=sources)
+            evaluation_context.on_evaluate_enter(expression=self, sources=sources)
             # Normalize sources: extract bindings if passed as an OperationResult
+            previous_result = None
             if isinstance(sources, OperationResult):
-                sources = sources.bindings
-            sources = copy(sources) if sources is not None else {}
-            if self._id_ in sources:
-                result = OperationResult(sources, self._is_false_, self)
-                ctx.on_result_yielded(expression=self, result=result)
+                bindings = copy(sources.bindings)
+                previous_result = sources
+            else:
+                bindings = copy(sources) if sources is not None else {}
+            if self._id_ in bindings:
+                result = OperationResult(bindings, self._is_false_, self, previous_result)
+                evaluation_context.on_result_yielded(expression=self, result=result)
                 yield result
             else:
                 for result in map(
                     self._evaluate_conclusions_and_update_bindings_,
-                    self._evaluate__(sources),
+                    self._evaluate__(bindings),
                 ):
-                    ctx.on_result_yielded(expression=self, result=result)
+                    evaluation_context.on_result_yielded(expression=self, result=result)
                     yield result
         finally:
             self._eval_parent_ = previous_parent
-            ctx.on_evaluate_exit(expression=self)
-            if owns_ctx:
+            evaluation_context.on_evaluate_exit(expression=self)
+            if owns_an_evaluation_context:
                 set_evaluation_context(None)
 
     def _evaluate_conclusions_and_update_bindings_(

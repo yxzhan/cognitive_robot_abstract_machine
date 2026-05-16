@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import operator
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, is_dataclass, fields, field
+from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Self
 
@@ -26,7 +26,7 @@ from krrood.entity_query_language.core.base_expressions import (
     UnaryExpression,
     Bindings,
     OperationResult,
-    Selectable, SymbolicExpression,
+    Selectable, SymbolicExpression, UnificationDict,
 )
 from krrood.entity_query_language.operators.comparator import Comparator
 from krrood.entity_query_language.utils import (
@@ -34,7 +34,6 @@ from krrood.entity_query_language.utils import (
     merge_args_and_kwargs,
     convert_args_and_kwargs_into_hashable_key,
 )
-
 from krrood.symbol_graph.helpers import get_field_type_endpoint
 
 
@@ -58,7 +57,7 @@ class CanBehaveLikeAVariable(Selectable[T], ABC):
     """
 
     def _get_mapped_variable_(
-        self, type_: Type[MappedVariable], *args, **kwargs
+            self, type_: Type[MappedVariable], *args, **kwargs
     ) -> MappedVariable:
         """
         Retrieves or creates a MappedVariable instance based on the provided arguments.
@@ -144,8 +143,8 @@ class MappedVariable(UnaryExpression, CanBehaveLikeAVariable[T], ABC):
         self._type_ = self._child_._type_ if self._type_ is None else self._type_
 
     def _evaluate__(
-        self,
-        sources: Bindings,
+            self,
+            sources: Bindings,
     ) -> Iterable[OperationResult]:
         """
         Apply the mapping to the child's values.
@@ -261,7 +260,9 @@ class Index(MappedVariable):
     def _apply_mapping_(self, value: Any, sources: Optional[Bindings] = None) -> Iterable[Any]:
         sources = sources or {}
         try:
-            if isinstance(self._key_, SymbolicExpression):
+            # Need to verify that this solution is general and not a hack.
+            if isinstance(self._key_, SymbolicExpression) and not (
+                    isinstance(value, UnificationDict) and self._key_ in value):
                 for key in self._key_._evaluate_(sources, parent=self):
                     yield value[key.value]
             else:
@@ -366,6 +367,6 @@ class MappedVariableCacheItem:
 
     def __eq__(self, other):
         return (
-            isinstance(other, MappedVariableCacheItem)
-            and self.hashable_key == other.hashable_key
+                isinstance(other, MappedVariableCacheItem)
+                and self.hashable_key == other.hashable_key
         )
