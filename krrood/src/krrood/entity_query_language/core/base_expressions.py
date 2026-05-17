@@ -117,6 +117,12 @@ class SymbolicExpression(ABC):
 
     @lru_cache
     def _get_expression_by_id_(self, id_: uuid.UUID) -> SymbolicExpression:
+        """
+        Retrieve the expression with the given ID from the collection of all expressions.
+
+        :param id_: The unique identifier of the expression to retrieve.
+        :return: The expression with the specified ID, or raises NoExpressionFoundForGivenID if not found.
+        """
         try:
             return next(
                 expression
@@ -130,6 +136,9 @@ class SymbolicExpression(ABC):
         """
         Compute the truth value for this expression given the current binding value.
         Only meaningful when the eval-time parent is a TruthValueOperator; returns False otherwise.
+        
+        :param current_value: The current value of the binding.
+        :return: True if the expression evaluates to False, False otherwise.
         """
         if not isinstance(self._eval_parent_, TruthValueOperator):
             return False
