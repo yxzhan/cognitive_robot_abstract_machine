@@ -443,7 +443,7 @@ class Base(KinematicChain):
 
     @property
     def bounding_box(self) -> BoundingBox:
-         bounding_boxes = []
+        bounding_boxes = []
         for kse in self._world.compute_chain_of_kinematic_structure_entities(
             self.root, self.tip
         ):
