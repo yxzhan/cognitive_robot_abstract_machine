@@ -1,6 +1,8 @@
 import operator
 from dataclasses import dataclass
 
+import pytest
+
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.mapped_variable import Attribute
 from krrood.entity_query_language.evaluation import is_condition_participant
@@ -706,16 +708,8 @@ def test_explanation_condition_graph_and_visualize():
     assert ax is not None
 
 
-def test_nested_rule_explanation(doors_and_drawers_world):
-    world = doors_and_drawers_world
-    handle = variable(Handle, world.bodies)
-    prismatic_connection = variable(PrismaticConnection, world.connections)
-    fixed_connection = match_variable(FixedConnection, world.connections)(
-        parent=prismatic_connection.child, child=handle
-    )
-    found_drawers = inference(Drawer)(
-        container=fixed_connection.parent, handle=fixed_connection.child
-    ).tolist()
+def test_nested_rule_explanation(drawer_rule):
+    found_drawers = drawer_rule.tolist()
     explanation = explain_inference(found_drawers[0])
     assert explanation is not None
     assert isinstance(explanation.query_root, SymbolicExpression)
@@ -739,3 +733,21 @@ def test_nested_rule_explanation(doors_and_drawers_world):
         '(FixedConnection.parent == PrismaticConnection.child)'
         '\nAND (FixedConnection.child == Handle)')
     explanation.condition_graph().visualize(filename="drawer_explanation.pdf")
+
+
+def test_nested_rule_meta_queries(drawer_rule):
+    explanation = explain_inference(drawer_rule)
+
+
+
+@pytest.fixture
+def drawer_rule(doors_and_drawers_world):
+    world = doors_and_drawers_world
+    handle = variable(Handle, world.bodies)
+    prismatic_connection = variable(PrismaticConnection, world.connections)
+    fixed_connection = match_variable(FixedConnection, world.connections)(
+        parent=prismatic_connection.child, child=handle
+    )
+    return inference(Drawer)(
+        container=fixed_connection.parent, handle=fixed_connection.child
+    )
