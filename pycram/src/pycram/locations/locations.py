@@ -2,6 +2,10 @@ import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
 
+import numpy as np
+
+from pycram import logger
+
 from typing_extensions import List, Optional, Iterator
 
 from giskardpy.executor import Executor
@@ -26,6 +30,21 @@ from pycram.locations.costmaps import (
     Costmap,
 )
 from pycram.view_manager import ViewManager
+
+logger = logging.getLogger("pycram")
+
+try:
+    from semantic_digital_twin.adapters.ros.visualization.pose_publisher import (
+        PosePublisher,
+    )
+    from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
+        VizMarkerPublisher,
+    )
+except ModuleNotFoundError as e:
+    logger.warning(f"Could not import modules from ros adapter: {e}")
+    PosePublisher = None
+    VizMarkerPublisher = None
+
 from semantic_digital_twin.collision_checking.collision_rules import (
     AvoidExternalCollisions,
 )
@@ -34,7 +53,7 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
-logger = logging.getLogger("pycram")
+
 
 
 @dataclass
