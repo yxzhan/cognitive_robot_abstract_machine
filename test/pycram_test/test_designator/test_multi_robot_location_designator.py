@@ -7,7 +7,6 @@ from typing_extensions import Generator, Tuple
 import pycram.alternative_motion_mappings.hsrb_motion_mapping  # type: ignore
 import pycram.alternative_motion_mappings.stretch_motion_mapping  # type: ignore
 import pycram.alternative_motion_mappings.tiago_motion_mapping  # type: ignore
-from conftest import rclpy_node
 from pycram.datastructures.dataclasses import Context
 from pycram.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
 from pycram.datastructures.grasp import GraspDescription
