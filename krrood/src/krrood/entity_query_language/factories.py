@@ -420,10 +420,15 @@ def next_rule(*conditions: ConditionType) -> SymbolicExpression:
 
 @dataclass(eq=False)
 class CaseWhen(Selectable):
-    """Represents a SQL CASE WHEN ... THEN ... ELSE ... END expression."""
-    condition: Any
-    then_value: Any
-    else_value: Any = None
+    """
+    Represents a SQL CASE WHEN ... THEN ... ELSE ... END expression.
+
+    This construct is designed exclusively for SQL translation via the EQL translator.
+    Local Python evaluation is not supported — use the SQL translator instead.
+    """
+    condition: SymbolicExpression
+    then_value: SymbolicExpression
+    else_value: Optional[SymbolicExpression] = None
 
     def __post_init__(self):
         # Inherit the type from the 'then' value if available for EQL validation
@@ -454,13 +459,25 @@ class CaseWhen(Selectable):
         """Return the symbolic name of this expression node."""
         return "case_when"
 
-    def _evaluate__(self) -> Any:
+    def _evaluate__(self, sources: Any) -> Any:
         """
-        Local Python evaluation for this node.
-        Since this node is designed to be translated into SQL via SQLAlchemy,
-        in-memory execution is not implemented.
+        Evaluates the condition locally in Python.
         """
-        raise NotImplementedError("Local evaluation for CaseWhen is not implemented.")
+        cond_result = self.condition._evaluate__(sources)
+
+        is_true = bool(cond_result) if not isinstance(cond_result, list) else len(cond_result) > 0
+
+        if is_true:
+            if hasattr(self.then_value, "_evaluate__"):
+                return self.then_value._evaluate__(sources)
+            return self.then_value
+        else:
+            if self.else_value is not None:
+                if hasattr(self.else_value, "_evaluate__"):
+                    return self.else_value._evaluate__(sources)
+                return self.else_value
+            return None
+
 
     def _replace_child_field_(self, old: Any, new: Any) -> None:
         """Replace a child expression node during EQL tree manipulation."""
