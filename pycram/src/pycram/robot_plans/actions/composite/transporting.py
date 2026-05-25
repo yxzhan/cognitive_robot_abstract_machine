@@ -80,7 +80,7 @@ class TransportAction(ActionDescription):
         drawer_annotation = list(drawer_annotation.evaluate())
         if len(drawer_annotation) == 0:
             return
-        handle = drawer_annotation[0].handle
+        handle = drawer_annotation[0].handle.root
 
         self.add_subplan(
             sequential(
