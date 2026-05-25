@@ -80,7 +80,7 @@ class TransportAction(ActionDescription):
         drawer_annotation = list(drawer_annotation.evaluate())
         if len(drawer_annotation) == 0:
             return
-        handle = drawer_annotation[0].handle.root
+        handle = drawer_annotation[0].handle
 
         self.add_subplan(
             sequential(
@@ -95,6 +95,8 @@ class TransportAction(ActionDescription):
                         True,
                     ),
                     OpenAction(handle, self.arm),
+                    # Note: without the CostmapLocation fails
+                    MoveTorsoAction(TorsoState.HIGH),
                 ]
             )
         ).perform()

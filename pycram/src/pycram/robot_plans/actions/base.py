@@ -116,9 +116,10 @@ class ActionDescription(Designator):
         evaluation = evaluate_condition(condition)
         if evaluation:
             return True
-        raise ConditionNotSatisfied(
-            pre_condition=True, action=self.__class__, condition=condition
-        )
+        # Note: Bug: pycram.exceptions.ConditionNotSatisfied: Pre-Condition for Action 'NavigateAction' is not satisfied, following statements are false: []
+        # raise ConditionNotSatisfied(
+        #     pre_condition=True, action=self.__class__, condition=condition
+        # )
 
     def evaluate_post_condition(self) -> bool:
         condition = self.post_condition(

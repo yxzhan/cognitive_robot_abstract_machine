@@ -125,7 +125,12 @@ class Garmi(AbstractRobot, SpecifiesLeftRightArm, HasNeck):
             name=PrefixedName(f"{side}_gripper", prefix=self.name.name),
             root=self._world.get_body_by_name(f"{arm_id}_gripper_fr3_hand"),
             tool_frame=self._world.get_body_by_name(f"{arm_id}_gripper_fr3_hand_tcp"),
-            front_facing_orientation=Quaternion(0, 0, 0, 1),
+            front_facing_orientation=Quaternion(
+                -0.70710678,
+                0.0,
+                -0.70710678,
+                0.0,
+            ),
             front_facing_axis=Vector3(0, 0, 1),
             thumb=gripper_thumb,
             finger=gripper_finger,
