@@ -4,23 +4,15 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional, Any, Dict
 
-import numpy as np
 from typing_extensions import Optional, Type, Any
-
-from krrood.entity_query_language.core.base_expressions import SymbolicExpression
-from krrood.entity_query_language.core.variable import Variable
-from pycram.datastructures.dataclasses import Context
 
 from pycram.datastructures.enums import DetectionTechnique, DetectionState
 from pycram.datastructures.grasp import GraspDescription
 from pycram.perception import PerceptionQuery
 from pycram.plans.factories import sequential
-from pycram.plans.failures import NavigationGoalNotReachedError
-from pycram.robot_plans import MoveManipulatorMotion
 from pycram.robot_plans.actions.base import ActionDescription
 from pycram.robot_plans.actions.core.navigation import NavigateAction
 from pycram.robot_plans.actions.core.robot_body import MoveManipulatorAction
-from semantic_digital_twin.robots.abstract_robot import Manipulator
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
     RotationMatrix,
@@ -29,7 +21,6 @@ from semantic_digital_twin.spatial_types import (
 from semantic_digital_twin.spatial_types.spatial_types import (
     Pose,
     Point3,
-    Quaternion,
     Pose2D,
 )
 from semantic_digital_twin.world_description.geometry import BoundingBox
@@ -137,7 +128,6 @@ class MoveToReach(ActionDescription):
             ).to_quaternion(),
             self.target_pose_manipulator.reference_frame,
         )
-
         self.add_subplan(
             sequential(
                 [

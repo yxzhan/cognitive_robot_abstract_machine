@@ -51,9 +51,8 @@ class MoveManipulatorMotion(BaseMotion):
 
     @property
     def _motion_chart(self):
-        root = self.world.root if self.robot.full_body_controlled else self.robot.root
         task = CartesianPose(
-            root_link=root,
+            root_link=self.world.root,
             tip_link=self.manipulator.tool_frame,
             goal_pose=self.target,
             name=self.__class__.__name__,
