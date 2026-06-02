@@ -554,6 +554,7 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
             for robot_part in self._robot_parts:
                 robot_part.setup_hardware_interfaces()
                 robot_part.add_joint_states(robot_part.setup_joint_states())
+            self._setup_collision_rules()
             return self
 
     @property
@@ -667,3 +668,9 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
             if isinstance(robot_part, Camera) and robot_part.default_camera:
                 return robot_part
         raise MissingDefaultCameraError(type(self))
+
+    @abstractmethod
+    def _setup_collision_rules(self):
+        """
+        Sets up collision rules for the robot
+        """
