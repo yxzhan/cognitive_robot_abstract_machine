@@ -9,7 +9,7 @@ from pycram.plans.factories import sequential
 from pycram.robot_plans.actions.base import ActionDescription
 from pycram.robot_plans.actions.core.container import OpenAction
 from pycram.robot_plans.actions.core.misc import MoveToReach
-from semantic_digital_twin.robots.abstract_robot import Manipulator
+from semantic_digital_twin.robots.robot_parts import EndEffector
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Door
 from semantic_digital_twin.spatial_types import Pose2D, Pose
 from semantic_digital_twin.world_description.graph_of_convex_sets import (
@@ -77,7 +77,7 @@ class Sage10kOpenDoor(ActionDescription):
             grasp_description=underspecified(GraspDescription)(
                 approach_direction=ApproachDirection.FRONT,
                 vertical_alignment=VerticalAlignment.NoAlignment,
-                manipulator=variable(Manipulator, self.world.semantic_annotations),
+                manipulator=variable(EndEffector, self.world.semantic_annotations),
                 rotate_gripper=False,
             ),
         )
