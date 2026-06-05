@@ -2,13 +2,7 @@ from collections import defaultdict
 
 import numpy as np
 import pytest
-from giskardpy.qp.qp_adapter import (
-    DofLimits,
-    EqualityDerivativeLinkModel,
-    EqualityConstraintModel,
-    QPDataSymbolic,
-    InequalityConstraintModel,
-)
+from giskardpy.qp.constraint import DofLimits
 from giskardpy.qp.constraint_collection import ConstraintCollection
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 from giskardpy.qp.qp_data_factories import QPDataExplicitFactory
