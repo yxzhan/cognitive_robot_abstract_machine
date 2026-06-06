@@ -19,6 +19,9 @@ from typing_extensions import (
 )
 from uuid import UUID
 
+from typing_extensions import Union, Iterable, List
+from dataclasses import dataclass
+
 from krrood.entity_query_language.core.base_expressions import (
     SymbolicExpression,
     TruthValueOperator,
@@ -48,6 +51,7 @@ from krrood.entity_query_language.operators.aggregators import (
 )
 from krrood.entity_query_language.operators.comparator import Comparator
 from krrood.entity_query_language.operators.concatenation import Concatenation
+from krrood.entity_query_language.operators.conditionals import CaseWhen
 from krrood.entity_query_language.operators.core_logical_operators import (
     chained_logic,
     AND,
@@ -427,6 +431,29 @@ def next_rule(*conditions: ConditionType) -> SymbolicExpression:
     """
     return Next.create_and_update_rule_tree(*conditions)
 
+# %% Conditionals
+
+def case_when(
+    condition: SymbolicExpression,
+    then_value: SymbolicExpression,
+    else_value: Optional[SymbolicExpression] = None,
+) -> CaseWhen:
+    """
+    Create a CASE WHEN ... THEN ... ELSE ... END expression.
+
+    .. code-block:: python
+
+        action = variable(MoveAction, domain=[])
+        query = an(set_of(
+            min(case_when(action.polymorphic_type == 'PickUpActionDAO', action.database_id))
+        ))
+
+    :param condition: The condition to evaluate
+    :param then_value: The value if condition is true
+    :param else_value: The value if condition is false
+    :return: A CaseWhen expression
+    """
+    return CaseWhen(condition, then_value, else_value)
 
 # %% Aggregators
 
