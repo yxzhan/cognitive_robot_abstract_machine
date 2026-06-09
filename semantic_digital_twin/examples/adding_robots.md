@@ -287,6 +287,20 @@ with objects), and a `front_facing_orientation` quaternion that describes the
 forward-facing direction of the tool frame.
 
 ```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Self, List
+
+from semantic_digital_twin.datastructures.definitions import GripperState
+from semantic_digital_twin.datastructures.joint_state import JointState
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.robot_part_mixins import HasTwoFingers
+from semantic_digital_twin.robots.robot_parts import EndEffector
+from semantic_digital_twin.spatial_types import Quaternion
+from semantic_digital_twin.world_description.world_entity import KinematicStructureEntity
+
+
 # HasTwoFingers[Left, Right] adds a `fingers` list and auto-initialises both fingers.
 # Use HasFingers[Thumb, ...] for three or more fingers.
 
@@ -340,6 +354,18 @@ Multiple chains can share a root body — this is normal for humanoids where bot
 arms and the neck all originate from the same shoulder or chest link.
 
 ```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Self, List
+
+from semantic_digital_twin.datastructures.definitions import StaticJointState
+from semantic_digital_twin.datastructures.joint_state import JointState
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.robot_parts import Arm, Neck
+from semantic_digital_twin.world_description.world_entity import KinematicStructureEntity
+
+
 @dataclass(eq=False)
 class MyRobotArm(Arm[MyRobotGripper]):
 
@@ -401,6 +427,19 @@ mounted directly on the base), skip the `Torso` class and put `HasOneArm` direct
 on `MobileBase` or the robot class.
 
 ```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Self, List
+
+from semantic_digital_twin.datastructures.definitions import TorsoState
+from semantic_digital_twin.datastructures.joint_state import JointState
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.robot_part_mixins import HasOneArm, HasNeck, HasTorso
+from semantic_digital_twin.robots.robot_parts import MobileBase, Torso
+from semantic_digital_twin.world_description.world_entity import KinematicStructureEntity
+
+
 # Torso: HasOneArm for a single arm, HasLeftRightArm[L, R] for two.
 # HasNeck is optional — omit it if the camera is fixed.
 
@@ -494,6 +533,14 @@ that the fastest joint is capped at the given value.
 per joint individually.
 
 ```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
+from semantic_digital_twin.robots.robot_parts import AbstractRobot
+
+
 @dataclass(eq=False)
 class MyRobot(AbstractRobot, HasMobileBase[MyRobotMobileBase]):
     """
@@ -524,22 +571,21 @@ class MyRobot(AbstractRobot, HasMobileBase[MyRobotMobileBase]):
 ## Step 6: Instantiate and validate
 
 ```python
+from semantic_digital_twin.adapters.urdf import URDFParser
+
 # Re-parse your URDF to get a fresh world, then annotate it with your robot class.
 parser = URDFParser.from_file("/path/to/your/robot.urdf")
 world = parser.parse()
 
 robot = MyRobot.from_world(world)
-```
 
-`from_world` calls `setup_robot_part_semantic_annotations` internally, which walks
-the generic type parameters you declared (e.g. `HasMobileBase[MyRobotMobileBase]`)
-and calls `setup_default_configuration_in_world_below_robot_root` for each part
-automatically. You do not need to instantiate the parts manually.
+# from_world calls setup_robot_part_semantic_annotations internally, which walks
+# the generic type parameters you declared (e.g. HasMobileBase[MyRobotMobileBase])
+# and calls setup_default_configuration_in_world_below_robot_root for each part
+# automatically. You do not need to instantiate the parts manually.
 
-Call `validate()` to check that all parts are correctly initialised, that backreferences
-are consistent, and that exactly one camera has `default_camera=True`:
-
-```python
+# validate() checks that all parts are correctly initialised, that backreferences
+# are consistent, and that exactly one camera has default_camera=True.
 robot.validate()
 ```
 
