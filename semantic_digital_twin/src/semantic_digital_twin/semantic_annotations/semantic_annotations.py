@@ -405,7 +405,10 @@ class Cooktop(HasRootBody):
     """
 
 @dataclass(eq=False)
-class Oven(HasRootBody, HasHinge): ...
+class Oven(HasCaseAsRootBody):
+    @classproperty
+    def hole_direction(self) -> Vector3:
+        return Vector3.NEGATIVE_X()
 
 @dataclass(eq=False)
 class Dresser(Cabinet, HasDrawers, HasDoors): ...
