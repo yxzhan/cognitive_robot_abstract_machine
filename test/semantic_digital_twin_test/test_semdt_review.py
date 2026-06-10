@@ -35,7 +35,10 @@ from semantic_digital_twin.callbacks.callback import Callback, ModelChangeCallba
 from semantic_digital_twin.datastructures.field_of_view import FieldOfView
 from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.exceptions import WorldEntityNotFoundError
+from semantic_digital_twin.exceptions import (
+    MissingWorldModificationContextError,
+    WorldEntityNotFoundError,
+)
 from semantic_digital_twin.reasoning.robot_predicates import (
     is_gripper_holding_something,
 )
@@ -459,6 +462,29 @@ def test_bug_15_get_semantic_annotation_by_id_raises_package_exception():
     world = World()
     with pytest.raises(WorldEntityNotFoundError):
         world.get_semantic_annotation_by_id(uuid4())
+
+
+def test_bug_16_failed_add_without_context_does_not_brick_the_world():
+    """world.py:269-271: atomic_world_modification sets
+    _current_active_atomic_world_modification *before* checking that a
+    modification context is open. When that check raises
+    MissingWorldModificationContextError, the flag is never reset, so every
+    subsequent modification on this world — including correct ones inside
+    `with world.modify_world():` — fails with the unrelated
+    AtomicWorldModificationNotAtomic. A beginner's first mistake permanently
+    bricks the world object."""
+    world = World()
+    body = Body(name=PrefixedName("body", prefix="review"))
+
+    with pytest.raises(MissingWorldModificationContextError):
+        world.add_kinematic_structure_entity(body)
+
+    # the failed call must not poison the world: the same operation done
+    # correctly afterwards has to succeed
+    with world.modify_world():
+        world.add_kinematic_structure_entity(body)
+
+    assert body in world.bodies
 
 
 # %% Design problems and consistency risks
