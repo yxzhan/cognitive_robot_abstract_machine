@@ -66,6 +66,15 @@ class GiskardLocationBackend(PoseGeneratorBackend):
     The world in which to sample 
     """
 
+    distance_to_obstacle: float = 0.1
+    """
+    Distance by which the obstacles should be inflated, is set to the radius of the mobile base by default
+    """
+
+    def __post_init__(self):
+        base_bb = self.robot.mobile_base.bounding_box
+        self.distance_to_obstacle = (base_bb.width / 2 + base_bb.depth / 2) / 2 + 0.5
+
     def setup_costmap(self, pose: Pose) -> Costmap:
         """
         Setup the reachability costmap for initial pose estimation.
@@ -82,7 +91,7 @@ class GiskardLocationBackend(PoseGeneratorBackend):
             world=self.world,
             robot_view=self.robot,
             origin=ground_pose,
-            distance_to_obstacle=(base_bb.width / 2 + base_bb.depth / 2) / 2 + 0.5,
+            distance_to_obstacle=self.distance_to_obstacle,
         )
         gaussian_map = GaussianCostmap(
             resolution=0.02,

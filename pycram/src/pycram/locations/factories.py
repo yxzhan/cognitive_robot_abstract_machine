@@ -25,7 +25,7 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 
 def _get_object_in_hand(
-    test_robot: AbstractRobot, test_world: World, arm: Arms = Arms.BOTH
+    test_robot: AbstractRobot, test_world: World, arm: Arms
 ) -> Optional[Body]:
     """
     Util method that finds the object a robot is holding in the given arm.
@@ -40,15 +40,12 @@ def _get_object_in_hand(
         arm,
         test_robot,
     )
-    manipulators = (
-        [manipulator] if not isinstance(manipulator, list_like_classes) else manipulator
-    )
+
     objs = set()
-    for man in manipulators:
-        objs.update(
-            test_world.get_kinematic_structure_entities_of_branch(man.tool_frame)
-        )
-        objs.remove(man.tool_frame)
+    objs.update(
+        test_world.get_kinematic_structure_entities_of_branch(manipulator.tool_frame)
+    )
+    objs.remove(manipulator.tool_frame)
     return objs.pop() if objs else None
 
 

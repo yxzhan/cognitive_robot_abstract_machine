@@ -55,7 +55,8 @@ class IsVisibleBy(PoseValidator):
     """
 
     def __call__(self, *args, **kwargs) -> bool:
-        assert self.target_pose or self.target_body
+        if not (self.target_pose or self.target_body):
+            raise AttributeError("Either a pose or a body have to be given")
         return self.validate_body() if self.target_body else self.validate_pose()
 
     def validate_pose(self) -> bool:
