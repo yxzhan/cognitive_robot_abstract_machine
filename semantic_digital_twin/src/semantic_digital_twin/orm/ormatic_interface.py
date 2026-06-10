@@ -128,6 +128,7 @@ class Base(DeclarativeBase):
         krrood.adapters.json_serializer.SubclassJSONSerializer: sqlalchemy.sql.sqltypes.JSON,
         uuid.UUID: sqlalchemy.sql.sqltypes.UUID,
         pathlib.Path: krrood.ormatic.custom_types.PathType,
+        krrood.adapters.json_serializer.JSONData: krrood.ormatic.custom_types.JSONDataType,
     }
 
 
@@ -18608,9 +18609,13 @@ class AddSemanticAnnotationModificationDAO(
         use_existing_column=True,
     )
 
-    semantic_annotation_json: Mapped[
-        typing.List[krrood.adapters.json_serializer.JSONData]
-    ] = mapped_column(JSON, nullable=False, use_existing_column=True)
+    semantic_annotation_json: Mapped[krrood.adapters.json_serializer.JSONData] = (
+        mapped_column(
+            krrood.ormatic.custom_types.JSONDataType,
+            nullable=False,
+            use_existing_column=True,
+        )
+    )
 
     __mapper_args__ = {
         "polymorphic_identity": "AddSemanticAnnotationModificationDAO",
