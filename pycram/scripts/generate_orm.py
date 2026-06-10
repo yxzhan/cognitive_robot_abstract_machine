@@ -5,6 +5,7 @@ import numpy as np
 
 import giskardpy  # type: ignore
 import pycram.locations.costmaps
+from pycram.orm import ormatic_interface
 import semantic_digital_twin.orm.ormatic_interface
 from krrood.adapters.json_serializer import SubclassJSONSerializer
 
@@ -40,8 +41,6 @@ logging.getLogger("krrood").setLevel(logging.DEBUG)
 # Generate the ORM classes
 ormatic.make_all_tables()
 
-ormatic_interface_path = (
-    Path(__file__).parent.parent / "src" / "pycram" / "orm" / "ormatic_interface.py"
-)
+ormatic_interface_path = Path(ormatic_interface.__file__)
 with open(ormatic_interface_path, "w") as f:
     ormatic.to_sqlalchemy_file(f)
