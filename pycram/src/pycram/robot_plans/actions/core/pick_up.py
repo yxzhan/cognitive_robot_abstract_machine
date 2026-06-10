@@ -20,7 +20,7 @@ from pycram.datastructures.enums import (
     MovementType,
 )
 from pycram.datastructures.grasp import GraspDescription
-from pycram.locations.pose_validator import ReachabilitySequenceValidator
+from pycram.locations.pose_validator import AreReachableBy
 from pycram.plans.factories import sequential, execute_single
 from pycram.querying.predicates import GripperIsFree
 from pycram.robot_plans.actions.base import ActionDescription
@@ -105,7 +105,7 @@ class ReachAction(ActionDescription):
             reverse=kwargs["reverse_reach_order"],
         )
         return and_(
-            ReachabilitySequenceValidator(
+            AreReachableBy(
                 world=test_world,
                 robot=test_world.get_semantic_annotations_by_type(type(context.robot))[
                     0
@@ -210,7 +210,7 @@ class PickUpAction(ActionDescription):
         )
         return and_(
             GripperIsFree(end_effector),
-            ReachabilitySequenceValidator(
+            AreReachableBy(
                 world=test_world,
                 robot=test_world.get_semantic_annotations_by_type(type(context.robot))[
                     0

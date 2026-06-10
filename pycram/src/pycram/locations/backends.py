@@ -101,7 +101,7 @@ class GiskardLocationBackend(PoseGeneratorBackend):
         self,
         pose_sequence: List[Pose],
         world: World,
-        robot_view: AbstractRobot,
+        robot: AbstractRobot,
         end_effector: EndEffector,
     ) -> Executor:
         """
@@ -109,7 +109,7 @@ class GiskardLocationBackend(PoseGeneratorBackend):
 
         :param pose_sequence: The pose sequence which the end_effector should follow
         :param world: The world in which the pose sequence should be executed
-        :param robot_view: The robot view of the robot which should be used for the execution, needs to fit the world
+        :param robot: The robot view of the robot which should be used for the execution, needs to fit the world
         :param end_effector: The end effector which should be controlled by Giskard
         :return: The Giskard executor for the pose sequence
         """
@@ -127,7 +127,7 @@ class GiskardLocationBackend(PoseGeneratorBackend):
             world.collision_manager.clear_temporary_rules()
             world.collision_manager.add_temporary_rule(
                 AvoidExternalCollisions(
-                    robot=robot_view, buffer_zone_distance=0.1, violated_distance=0.0
+                    robot=robot, buffer_zone_distance=0.1, violated_distance=0.0
                 )
             )
         msc = MotionStatechart()
@@ -145,7 +145,7 @@ class GiskardLocationBackend(PoseGeneratorBackend):
                     ]
                 ),
                 ExternalCollisionAvoidance(
-                    robot=robot_view, cancel_if_collision_violated=False
+                    robot=robot, cancel_if_collision_violated=False
                 ),
             ]
         )

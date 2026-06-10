@@ -10050,7 +10050,7 @@ class ReachMotionDAO(
 
 class ReachabilitySequenceValidatorDAO(
     PoseValidatorDAO,
-    DataAccessObject[pycram.locations.pose_validator.ReachabilitySequenceValidator],
+    DataAccessObject[pycram.locations.pose_validator.AreReachableBy],
 ):
 
     __tablename__ = "ReachabilitySequenceValidatorDAO"
@@ -10090,7 +10090,7 @@ class ReachabilitySequenceValidatorDAO(
 
 class ReachabilityValidatorDAO(
     PoseValidatorDAO,
-    DataAccessObject[pycram.locations.pose_validator.ReachabilityValidator],
+    DataAccessObject[pycram.locations.pose_validator.IsReachableBy],
 ):
 
     __tablename__ = "ReachabilityValidatorDAO"
@@ -15101,7 +15101,7 @@ class ViewManagerDAO(Base, DataAccessObject[pycram.view_manager.ViewManager]):
 
 class VisibilityValidatorDAO(
     PoseValidatorDAO,
-    DataAccessObject[pycram.locations.pose_validator.VisibilityValidator],
+    DataAccessObject[pycram.locations.pose_validator.IsVisibleBy],
 ):
 
     __tablename__ = "VisibilityValidatorDAO"

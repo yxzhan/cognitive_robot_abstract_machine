@@ -10,8 +10,8 @@ from pycram.locations.backends import GiskardLocationBackend
 from pycram.locations.base import Location
 from pycram.locations.costmaps import OccupancyCostmap, RingCostmap, VisibilityCostmap
 from pycram.locations.pose_validator import (
-    ReachabilitySequenceValidator,
-    VisibilityValidator,
+    AreReachableBy,
+    IsVisibleBy,
 )
 from pycram.view_manager import ViewManager
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
@@ -61,9 +61,7 @@ def occupancy_location(target_pose: Pose, context: Context) -> Location:
     :returns: The Location for robot base poses
     """
     return Location(
-        context,
-        target_pose,
-        _make_default_occupancy_costmap(context, target_pose),
+        context, target_pose, OccupancyCostmap.default_map(context, target_pose), []
     )
 
 
@@ -72,6 +70,7 @@ def reachability_location(
     context: Context,
     arm: Arms,
     grasp_description: GraspDescription = None,
+    mean_distance_to_target: float = 0.6,
 ) -> Location:
     """
     Factory method that creates a Location for robot poses from which the target can be picked up or placed.
@@ -80,6 +79,7 @@ def reachability_location(
     :param context: The context in which to create the location
     :param arm: The arm with which to reach the target
     :param grasp_description: The grasp description with which to grasp the target
+    :param mean_distance_to_target: The mean distance between the base pose of the robot and the target pose in the xy-plane, can be imagined as a ring around the target pose from which poses are sampled. The mean distance is the radius of the ring.
     :returns: A location that is reachable from the target pose.
     """
     target_pose, target_body = (
@@ -97,7 +97,7 @@ def reachability_location(
         width=200,
         height=200,
         std=15,
-        distance=0.6,  # That needs to be replaced with an estimate of the reachability space of the robot arms
+        distance=mean_distance_to_target,  # That needs to be replaced with an estimate of the reachability space of the robot arms
         world=context.world,
         origin=target_pose,
     )
@@ -106,7 +106,7 @@ def reachability_location(
         target_pose,
         costmap,
         [
-            ReachabilitySequenceValidator(
+            AreReachableBy(
                 pose_sequence=grasp_description._pose_sequence(
                     target_pose,
                     _get_object_in_hand(context.robot, context.world, arm)
@@ -170,7 +170,7 @@ def visibility_location(target: Union[Pose, Body], context: Context) -> Location
         target_pose,
         costmap,
         [
-            VisibilityValidator(
+            IsVisibleBy(
                 world=context.world,
                 robot=context.robot,
                 target_pose=target_pose,
@@ -217,7 +217,7 @@ def giskard_reachability_location(
         target_pose,
         backend,
         [
-            ReachabilitySequenceValidator(
+            AreReachableBy(
                 pose_sequence=grasp_description._pose_sequence(
                     target_pose,
                     _get_object_in_hand(context.robot, context.world, arm)

@@ -16,7 +16,7 @@ from pycram.datastructures.enums import (
     VerticalAlignment,
 )
 from pycram.datastructures.grasp import GraspDescription
-from pycram.locations.pose_validator import ReachabilityValidator
+from pycram.locations.pose_validator import IsReachableBy
 from pycram.plans.factories import sequential
 from pycram.querying.predicates import GripperIsFree
 from pycram.robot_plans.actions.base import ActionDescription
@@ -88,7 +88,7 @@ class OpenAction(ActionDescription):
 
         return and_(
             GripperIsFree(end_effector),
-            ReachabilityValidator(
+            IsReachableBy(
                 world=test_world,
                 robot=test_world.get_semantic_annotations_by_type(type(context.robot))[
                     0

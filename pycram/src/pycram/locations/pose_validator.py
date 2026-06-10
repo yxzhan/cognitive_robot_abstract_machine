@@ -38,7 +38,7 @@ logger = logging.getLogger("pycram")
 
 
 @dataclass
-class VisibilityValidator(PoseValidator):
+class IsVisibleBy(PoseValidator):
     """
     Validator for checking if either the given pose or body is visible for the robot. One has to be given, if both are
     provided the body is prefered
@@ -59,6 +59,12 @@ class VisibilityValidator(PoseValidator):
         return self.validate_body() if self.target_body else self.validate_pose()
 
     def validate_pose(self) -> bool:
+        """
+        Validates if the target_pose is visible for the robot by creating a temporary body at the pose and performing
+        a ray test to see if there is a viewing axis between the robot and the target pose.
+
+        :return: True if the target pose is visible for the robot, False otherwise
+        """
         gen_body = Body(
             name=PrefixedName("vist_test_obj", "pycram"),
             collision=ShapeCollection([Box(scale=Scale(0.1, 0.1, 0.1))]),
@@ -85,6 +91,13 @@ class VisibilityValidator(PoseValidator):
         return self._ray_test(self.target_body)
 
     def _ray_test(self, target_body: Body) -> bool:
+        """
+        Performs a ray test from the robot to check if the given body is visible, the check filters out bodies of the '
+        robot form the hit list of the ray test.
+
+        :param target_body: The body for which the ray test is to be performed
+        :return: True if the target body is visible for the robot, False otherwise
+        """
         r_t = self.world.ray_tracer
         camera = self.robot.get_default_camera()
         ray = r_t.ray_test(
@@ -99,7 +112,7 @@ class VisibilityValidator(PoseValidator):
 
 
 @dataclass
-class ReachabilityValidator(PoseValidator):
+class IsReachableBy(PoseValidator):
     """
     Validator that checks if a single pose is reachable with a link of the robot.
     """
@@ -120,7 +133,7 @@ class ReachabilityValidator(PoseValidator):
     """
 
     def __call__(self) -> bool:
-        return ReachabilitySequenceValidator(
+        return AreReachableBy(
             pose_sequence=[self.pose],
             tip_link=self.tip_link,
             robot=self.robot,
@@ -130,7 +143,7 @@ class ReachabilityValidator(PoseValidator):
 
 
 @dataclass
-class ReachabilitySequenceValidator(PoseValidator):
+class AreReachableBy(PoseValidator):
     """
     Validator that checks if a sequence of poses is reachable with the given robot link. Poses are addressed in the
     order they are given.
@@ -151,7 +164,11 @@ class ReachabilitySequenceValidator(PoseValidator):
     The grasp description that should be used for validation
     """
 
-    def create_msc(self):
+    def create_msc(self) -> MotionStatechart:
+        """
+        Creates the Motion state chart to reach the given pose sequence with the given tip link. Also takes into account
+        if there are alternative motion mappings for moving the end effector to the given pose.
+        """
         alternative_motion = AlternativeMotion.check_for_alternative(
             self.robot, MoveToolCenterPointMotion
         )
