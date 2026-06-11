@@ -10,7 +10,7 @@ import tqdm
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-import pycram.orm.ormatic_interface  # type: ignore  # noqa: F401
+import coraplex.orm.ormatic_interface  # type: ignore  # noqa: F401
 from experiments.experiment_definitions import (
     ExperimentResult,
     ExperimentsTable,
@@ -21,12 +21,12 @@ from krrood.entity_query_language.backends import ProbabilisticBackend
 from krrood.entity_query_language.factories import underspecified
 from krrood.ormatic.data_access_objects.helper import to_dao
 from krrood.ormatic.utils import create_engine, drop_database
-from pycram.datastructures.dataclasses import Context
-from pycram.motion_executor import simulated_robot
-from pycram.orm.ormatic_interface import Base, PlanMappingDAO  # type: ignore
-from pycram.plans.factories import sequential
-from pycram.robot_plans.actions.core.navigation import NavigateAction
-from pycram.robot_plans.actions.core.robot_body import MoveTorsoAction, ParkArmsAction
+from coraplex.datastructures.dataclasses import Context
+from coraplex.motion_executor import simulated_robot
+from coraplex.orm.ormatic_interface import Base, PlanMappingDAO  # type: ignore
+from coraplex.plans.factories import sequential
+from coraplex.robot_plans.actions.core.navigation import NavigateAction
+from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction, ParkArmsAction
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
@@ -40,7 +40,7 @@ from semantic_digital_twin.world_description.world_entity import Body
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 
 _REPO_ROOT = pathlib.Path(__file__).parents[4]
-_APARTMENT_URDF = _REPO_ROOT / "pycram" / "resources" / "worlds" / "apartment.urdf"
+_APARTMENT_URDF = _REPO_ROOT / "coraplex" / "resources" / "worlds" / "apartment.urdf"
 
 
 def _build_pr2_world() -> World:

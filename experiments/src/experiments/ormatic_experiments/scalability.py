@@ -9,8 +9,8 @@ from typing import Type, List, Set, Tuple
 import plotly.graph_objects as go
 import tqdm
 
-import pycram.orm.ormatic_interface  # type: ignore
-import pycram.plans.plan_node
+import coraplex.orm.ormatic_interface  # type: ignore
+import coraplex.plans.plan_node
 import semantic_digital_twin  # type: ignore
 from experiments.experiment_definitions import (
     ExperimentResult,
@@ -24,13 +24,13 @@ from krrood.ormatic.helper import get_classes_of_ormatic_interface
 from krrood.ormatic.ormatic import ORMatic
 from krrood.ormatic.type_dict import TypeDict
 from krrood.utils import recursive_subclasses
-from pycram.robot_plans.actions.base import ActionDescription
+from coraplex.robot_plans.actions.base import ActionDescription
 
 
 def build_cram_class_sets() -> Tuple[Set[Type], List[Type], dict]:
     """
     Collect all mappable classes, alternative mappings, and type mappings from
-    the pycram ORM interface.
+    the coraplex ORM interface.
 
     Filters out non-dataclasses and AlternativeMapping subclasses from the raw
     interface, then augments with the original classes of every registered
@@ -40,7 +40,7 @@ def build_cram_class_sets() -> Tuple[Set[Type], List[Type], dict]:
              pass to :func:`run_scalability_experiment`.
     """
     classes, alternative_mappings, type_mappings = get_classes_of_ormatic_interface(
-        pycram.orm.ormatic_interface
+        coraplex.orm.ormatic_interface
     )
     classes = set(classes)
 
@@ -309,7 +309,7 @@ def plot_scalability(table: ExperimentsTable) -> go.Figure:
 
 def main():
     classes, alternative_mappings, type_mappings = build_cram_class_sets()
-    required_classes = [pycram.plans.plan_node.UnderspecifiedNode, ActionDescription]
+    required_classes = [coraplex.plans.plan_node.UnderspecifiedNode, ActionDescription]
     results = []
     for class_drop_probability in tqdm.tqdm(
         [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0]

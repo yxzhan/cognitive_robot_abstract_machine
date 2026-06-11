@@ -12,10 +12,10 @@ from experiments.experiment_definitions import (
 )
 
 _REPO_ROOT = pathlib.Path(__file__).parents[4]
-_PYCRAM_INTERFACE = (
-    _REPO_ROOT / "pycram" / "src" / "pycram" / "orm" / "ormatic_interface.py"
+_coraplex_INTERFACE = (
+    _REPO_ROOT / "coraplex" / "src" / "coraplex" / "orm" / "ormatic_interface.py"
 )
-_CRAM_COMPONENTS = ("pycram", "semantic_digital_twin")
+_CRAM_COMPONENTS = ("coraplex", "semantic_digital_twin")
 
 
 def _count_loc(path: pathlib.Path) -> int:
@@ -64,25 +64,25 @@ class MaintainabilityResult(ExperimentResult):
     """
     Single-row summary of ORMatic's maintainability impact on CRAM.
 
-    Compares the developer-maintained model.py files (pycram +
+    Compares the developer-maintained model.py files (coraplex +
     semantic_digital_twin) against the generated ormatic_interface.py.
     """
 
     maintainability_index: float
     """
-    radon MI score (0–100) computed on the concatenated pycram and
+    radon MI score (0–100) computed on the concatenated coraplex and
     semantic_digital_twin model.py sources.  Higher is more maintainable.
     """
 
     lines_of_code: int
     """
-    Non-blank LOC across the pycram and semantic_digital_twin model.py files —
+    Non-blank LOC across the coraplex and semantic_digital_twin model.py files —
     the code a developer authors and maintains when using ORMatic.
     """
 
     generated_lines_of_code: int
     """
-    Non-blank LOC of pycram's ormatic_interface.py — the SQLAlchemy mapping
+    Non-blank LOC of coraplex's ormatic_interface.py — the SQLAlchemy mapping
     code ORMatic generates automatically, which would otherwise need manual
     maintenance.
     """
@@ -95,7 +95,7 @@ class MaintainabilityResult(ExperimentResult):
 
     alternative_mappings: int
     """
-    Total AlternativeMapping subclasses across pycram's and
+    Total AlternativeMapping subclasses across coraplex's and
     semantic_digital_twin's model.py files — the manual mapping effort that
     ORMatic cannot automate.
     """
@@ -108,7 +108,7 @@ class MaintainabilityResult(ExperimentResult):
 
 
 def _find_cram_model_files(repo_root: pathlib.Path) -> List[pathlib.Path]:
-    """Return ``*/orm/model.py`` files for pycram and semantic_digital_twin only."""
+    """Return ``*/orm/model.py`` files for coraplex and semantic_digital_twin only."""
     return sorted(
         p
         for p in repo_root.rglob("orm/model.py")
@@ -121,13 +121,13 @@ def _find_cram_model_files(repo_root: pathlib.Path) -> List[pathlib.Path]:
 
 def measure_maintainability(
     repo_root: pathlib.Path = _REPO_ROOT,
-    cram_interface: pathlib.Path = _PYCRAM_INTERFACE,
+    cram_interface: pathlib.Path = _coraplex_INTERFACE,
 ) -> MaintainabilityResult:
     """
     Measure ORMatic's maintainability impact on the CRAM repository.
 
-    Scans the pycram and semantic_digital_twin model.py files (the
-    developer-maintained ORMatic input) and compares them against pycram's
+    Scans the coraplex and semantic_digital_twin model.py files (the
+    developer-maintained ORMatic input) and compares them against coraplex's
     ormatic_interface.py (the generated output that would otherwise require
     manual maintenance).
 
