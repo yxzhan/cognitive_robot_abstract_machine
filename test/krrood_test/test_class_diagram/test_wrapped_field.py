@@ -6,7 +6,8 @@ from types import NoneType
 from typing_extensions import Type
 
 from krrood.class_diagrams.class_diagram import WrappedClass
-from krrood.class_diagrams.wrapped_field import WrappedField, common_base_class
+from krrood.class_diagrams.utils import common_base_class
+from krrood.class_diagrams.wrapped_field import WrappedField
 from ..dataset.example_classes import (
     KRROODPosition,
     KRROODOrientation,

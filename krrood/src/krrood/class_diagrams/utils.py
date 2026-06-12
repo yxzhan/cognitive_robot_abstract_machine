@@ -12,7 +12,7 @@ import builtins
 
 import typing_extensions
 from typing_extensions import Callable, get_args, get_origin
-from typing_extensions import List, Type, Any, Dict, Tuple, Generic
+from typing_extensions import List, Optional, Type, Any, Dict, Tuple, Generic
 from typing_extensions import TypeVar, TypeVarTuple
 
 from krrood import logger
@@ -36,6 +36,28 @@ def classes_of_module(module) -> List[Type]:
         if inspect.isclass(obj) and obj.__module__ == module.__name__:
             result.append(obj)
     return result
+
+
+def common_base_class(types: List[Type]) -> Optional[Type]:
+    """
+    Return the lowest common ancestor of *types*, or ``None`` if the only
+    common ancestor is :class:`object`.
+
+    Non-class entries (e.g. unresolved forward references) are silently
+    skipped.  If no classes remain after filtering, ``None`` is returned.
+    """
+    classes = [t for t in types if inspect.isclass(t)]
+    if not classes:
+        return None
+    if len(classes) == 1:
+        return classes[0]
+    common = set(classes[0].__mro__)
+    for t in classes[1:]:
+        common &= set(t.__mro__)
+    for cls in classes[0].__mro__:
+        if cls in common and cls is not object:
+            return cls
+    return None
 
 
 def behaves_like_a_built_in_class(
