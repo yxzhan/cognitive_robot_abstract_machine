@@ -5,7 +5,19 @@ from collections import defaultdict
 from dataclasses import dataclass, field, is_dataclass, fields, MISSING
 from functools import lru_cache
 from inspect import isclass
-from typing import Any, Set, Dict, Tuple, Type, List, TYPE_CHECKING, Optional, Union
+from typing import (
+    Any,
+    Callable,
+    Set,
+    Dict,
+    NamedTuple,
+    Tuple,
+    Type,
+    List,
+    TYPE_CHECKING,
+    Optional,
+    Union,
+)
 
 import rustworkx
 
@@ -25,27 +37,70 @@ if TYPE_CHECKING:
     )
 
 
+class _StaticDefault(NamedTuple):
+    """A field name paired with its static default value."""
+
+    name: str
+    """
+    Name of the dataclass field.
+    """
+
+    value: Any
+    """
+    The literal default value to assign.
+    """
+
+
+class _DefaultFactory(NamedTuple):
+    """A field name paired with its zero-argument factory callable."""
+
+    name: str
+    """
+    Name of the dataclass field.
+    """
+
+    factory: Callable[[], Any]
+    """
+    Callable that produces a fresh default value when invoked.
+    """
+
+
+@dataclass(frozen=True)
+class _AllocationPlan:
+    """Precomputed default-value information for a single domain class.
+
+    Separates fields with literal defaults from fields whose defaults are
+    produced by a factory, so the allocation loop can handle each case without
+    re-inspecting the dataclass on every call.
+    """
+
+    static_defaults: Tuple[_StaticDefault, ...]
+    """Fields whose default is a fixed value."""
+    default_factories: Tuple[_DefaultFactory, ...]
+    """Fields whose default must be produced by calling a factory."""
+
+
 @lru_cache(maxsize=None)
-def _get_allocation_plan(
-    original_clazz: Type,
-) -> Tuple[Tuple[Tuple[str, Any], ...], Tuple[Tuple[str, Any], ...]]:
+def _get_allocation_plan(original_clazz: Type) -> _AllocationPlan:
     """
     Precompute the default values of a domain class for allocation.
 
     :param original_clazz: The domain class.
-    :return: A tuple of (static defaults, default factories), each as (name, value) pairs.
+    :return: Static defaults and default factories for each field with a default.
     """
     if not is_dataclass(original_clazz):
-        return (), ()
+        return _AllocationPlan((), ())
 
     static_defaults = []
     default_factories = []
-    for f in fields(original_clazz):
-        if f.default is not MISSING:
-            static_defaults.append((f.name, f.default))
-        elif f.default_factory is not MISSING:
-            default_factories.append((f.name, f.default_factory))
-    return tuple(static_defaults), tuple(default_factories)
+    for field_ in fields(original_clazz):
+        if field_.default is not MISSING:
+            static_defaults.append(_StaticDefault(field_.name, field_.default))
+        elif field_.default_factory is not MISSING:
+            default_factories.append(
+                _DefaultFactory(field_.name, field_.default_factory)
+            )
+    return _AllocationPlan(tuple(static_defaults), tuple(default_factories))
 
 
 @dataclass
@@ -131,7 +186,9 @@ class FromDataAccessObjectState(DataAccessObjectState[FromDataAccessObjectWorkIt
         self._class_dependencies = rustworkx.PyDiGraph(multigraph=False)
         self._alternative_mappings_being_referenced = defaultdict(list)
 
-    def resolve_alternative_mapping(self, alternative_mapping: AlternativeMapping) -> Any:
+    def resolve_alternative_mapping(
+        self, alternative_mapping: AlternativeMapping
+    ) -> Any:
         """
         Convert an alternative mapping to its final domain object exactly once per instance.
 
@@ -199,11 +256,11 @@ class FromDataAccessObjectState(DataAccessObjectState[FromDataAccessObjectWorkIt
         """
 
         result = original_clazz.__new__(original_clazz)
-        static_defaults, default_factories = _get_allocation_plan(original_clazz)
-        for name, default in static_defaults:
-            object.__setattr__(result, name, default)
-        for name, factory in default_factories:
-            object.__setattr__(result, name, factory())
+        plan = _get_allocation_plan(original_clazz)
+        for entry in plan.static_defaults:
+            object.__setattr__(result, entry.name, entry.value)
+        for entry in plan.default_factories:
+            object.__setattr__(result, entry.name, entry.factory())
         self.register(dao_instance, result)
         return result
 
@@ -295,9 +352,10 @@ class FromDataAccessObjectState(DataAccessObjectState[FromDataAccessObjectWorkIt
         for alternative_mapping_type in ordered_types:
             for instance in instances_by_type[alternative_mapping_type]:
                 domain_object = self.resolve_alternative_mapping(instance)
-                for referencing_instance, reference in (
-                    self._alternative_mappings_being_referenced[instance]
-                ):
+                for (
+                    referencing_instance,
+                    reference,
+                ) in self._alternative_mappings_being_referenced[instance]:
                     reference._set_external_root_instance_value_(
                         referencing_instance, domain_object
                     )
