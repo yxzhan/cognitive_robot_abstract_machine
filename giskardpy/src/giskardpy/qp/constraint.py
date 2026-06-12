@@ -220,21 +220,35 @@ class DofLimits(DirectLimits):
         )
         one_step_change = jerk_limit * time_step**2
         one_step_change_lower_bound = sm.min(
-            sm.max(Scalar(0), position_error_lower_bound / time_step), Scalar(one_step_change)
+            sm.max(Scalar(0), position_error_lower_bound / time_step),
+            Scalar(one_step_change),
         )
-        one_step_change_lower_bound = sm.limit(one_step_change_lower_bound, -velocity_limit, velocity_limit)
+        one_step_change_lower_bound = sm.limit(
+            one_step_change_lower_bound, -velocity_limit, velocity_limit
+        )
         one_step_change_upper_bound = sm.max(
-            sm.min(Scalar(0), position_error_upper_bound / time_step), -Scalar(one_step_change)
+            sm.min(Scalar(0), position_error_upper_bound / time_step),
+            -Scalar(one_step_change),
         )
-        one_step_change_upper_bound = sm.limit(one_step_change_upper_bound, -velocity_limit, velocity_limit)
+        one_step_change_upper_bound = sm.limit(
+            one_step_change_upper_bound, -velocity_limit, velocity_limit
+        )
         velocity_lower_bound[0] = sm.if_greater(
-            position_error_lower_bound, 0, one_step_change_lower_bound, copy(velocity_lower_bound[0])
+            position_error_lower_bound,
+            0,
+            one_step_change_lower_bound,
+            copy(velocity_lower_bound[0]),
         )
         velocity_upper_bound[0] = sm.if_less(
-            position_error_upper_bound, 0, one_step_change_upper_bound, copy(velocity_upper_bound[0])
+            position_error_upper_bound,
+            0,
+            one_step_change_upper_bound,
+            copy(velocity_upper_bound[0]),
         )
         goal_profile = sm.max(velocity_lower_bound, 0) + sm.min(velocity_upper_bound, 0)
-        skip_first = sm.logic_or(velocity_lower_bound[0] >= 0, velocity_upper_bound[0] <= 0)
+        skip_first = sm.logic_or(
+            velocity_lower_bound[0] >= 0, velocity_upper_bound[0] <= 0
+        )
         return velocity_lower_bound, velocity_upper_bound, goal_profile, skip_first
 
     def compute_horizon_bounds(
@@ -261,7 +275,9 @@ class DofLimits(DirectLimits):
             )
         )
 
-        acceleration_profile = sm.Vector.ones(velocity_upper_bound.shape[0]) * acceleration_limit
+        acceleration_profile = (
+            sm.Vector.ones(velocity_upper_bound.shape[0]) * acceleration_limit
+        )
         jerk_profile = sm.Vector.ones(velocity_upper_bound.shape[0]) * jerk_limit
 
         projected_velocity_profile, _, _ = compute_slowdown_asap_vel_profile(
@@ -290,7 +306,9 @@ class DofLimits(DirectLimits):
             sm.logic_any(projected_velocity_profile > velocity_upper_bound + epsilon),
             sm.abs(projected_velocity_profile[-1]) >= epsilon,
         )
-        needs_relaxed_jerk_limits = sm.logic_or(velocity_lower_bound_violated, velocity_upper_bound_violated)
+        needs_relaxed_jerk_limits = sm.logic_or(
+            velocity_lower_bound_violated, velocity_upper_bound_violated
+        )
         jerk_profile[0] = sm.if_else(
             needs_relaxed_jerk_limits,
             sm.max(Scalar(jerk_limit), sm.abs(projected_jerk_profile_violated[0])),
@@ -329,12 +347,24 @@ class DofLimits(DirectLimits):
     def find_best_jerk_limit(
         self,
         prediction_horizon: int,
-        dt: float,
-        target_vel_limit: float,
+        time_step: float,
+        target_velocity_limit: float,
         solver_class: Type[QPSolver],
-        eps: float = 0.0001,
+        almost_equal_threshold: float = 0.0001,
     ) -> float:
-        jerk_limit = (4 * target_vel_limit) / dt**2
+        """
+        Searches for a jerk limit that allows the controller to achieve the `target_velocity_limit` barely within
+        the prediction horizon.
+        It searches by interactively solving MPCs without velocity limits but with a fixed jerk limit, until
+        the reached velocity is `eps` away from the target.
+        :param prediction_horizon: How many steps the MPC looks into the future. Should be same as final controller
+        :param time_step: Time between MPC steps.
+        :param target_velocity_limit: The velocity limit we want to achieve.
+        :param solver_class: The solver to use
+        :param almost_equal_threshold: Small value used for almost equal checks.
+        :return: The jerk limit that achieves target_velocity_limit.
+        """
+        jerk_limit = (4 * target_velocity_limit) / time_step**2
         upper_bound = jerk_limit
         lower_bound = 0
         best_vel_limit = 0
@@ -346,18 +376,18 @@ class DofLimits(DirectLimits):
                 vel_limit=1000,
                 acc_limit=np.inf,
                 jerk_limit=jerk_limit,
-                dt=dt,
+                dt=time_step,
                 max_derivative=Derivatives.jerk,
                 solver_class=solver_class,
             )[0]
-            if abs(vel_limit - target_vel_limit) < abs(
-                best_vel_limit - target_vel_limit
+            if abs(vel_limit - target_velocity_limit) < abs(
+                best_vel_limit - target_velocity_limit
             ):
                 best_vel_limit = vel_limit
                 best_jerk_limit = jerk_limit
-            if abs(vel_limit - target_vel_limit) < eps:
+            if abs(vel_limit - target_velocity_limit) < almost_equal_threshold:
                 break
-            if vel_limit > target_vel_limit:
+            if vel_limit > target_velocity_limit:
                 upper_bound = jerk_limit
                 jerk_limit = round((jerk_limit + lower_bound) / 2, 4)
             else:
@@ -365,7 +395,7 @@ class DofLimits(DirectLimits):
                 jerk_limit = round((jerk_limit + upper_bound) / 2, 4)
         logger.debug(
             f"best velocity limit: {best_vel_limit} "
-            f"(target = {target_vel_limit}) with jerk limit: {best_jerk_limit} after {i + 1} iterations"
+            f"(target = {target_velocity_limit}) with jerk limit: {best_jerk_limit} after {i + 1} iterations"
         )
         return best_jerk_limit
 
