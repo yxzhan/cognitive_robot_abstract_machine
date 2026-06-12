@@ -5,12 +5,11 @@ from typing import Type, Optional, Any, TYPE_CHECKING
 from typing_extensions import get_origin
 
 
-from krrood.ormatic.data_access_objects.alternative_mappings import AlternativeMapping
-
 from krrood.ormatic.exceptions import NoGenericError, NoDAOFoundError
 from krrood.utils import recursive_subclasses
 
 if TYPE_CHECKING:
+    from krrood.ormatic.data_access_objects.alternative_mappings import AlternativeMapping
     from krrood.ormatic.data_access_objects.dao import DataAccessObject
     from krrood.ormatic.data_access_objects.to_dao import ToDataAccessObjectState
 
@@ -101,6 +100,8 @@ def get_alternative_mapping(
     :param original_clazz: The domain class.
     :return: The corresponding alternative mapping or None.
     """
+    from krrood.ormatic.data_access_objects.alternative_mappings import AlternativeMapping
+
     return _get_clazz_by_original_clazz(AlternativeMapping, original_clazz)
 
 
