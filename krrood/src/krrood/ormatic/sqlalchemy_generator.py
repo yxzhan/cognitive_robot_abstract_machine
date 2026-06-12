@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
-import sys
 from dataclasses import dataclass, field
 from typing_extensions import TextIO, TYPE_CHECKING
 
+import black
 import jinja2
-
-from krrood.utils import run_black_on_file
 
 if TYPE_CHECKING:
     from krrood.ormatic.ormatic import ORMatic
@@ -57,8 +54,8 @@ class SQLAlchemyGenerator:
             ormatic=self.ormatic,
         )
 
+        # Format with black in-process (avoids subprocess spawn overhead)
+        output = black.format_str(output, mode=black.Mode())
+
         # Write the output to the file
         file.write(output)
-
-        # format the output with black
-        run_black_on_file(str(file.name))
