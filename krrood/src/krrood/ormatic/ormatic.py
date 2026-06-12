@@ -278,9 +278,11 @@ class ORMatic:
 
         # import classes from the existing interface
         for ormatic_interface in ormatic_interface_dependencies:
-            interface_classes, interface_alternative_mappings, interface_type_mappings = (
-                get_classes_of_ormatic_interface(ormatic_interface)
-            )
+            (
+                interface_classes,
+                interface_alternative_mappings,
+                interface_type_mappings,
+            ) = get_classes_of_ormatic_interface(ormatic_interface)
             all_classes |= set(interface_classes)
             all_alternative_mappings |= set(interface_alternative_mappings)
             all_type_mappings.update(interface_type_mappings)

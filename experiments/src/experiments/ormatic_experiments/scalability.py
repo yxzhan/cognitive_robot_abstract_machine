@@ -312,7 +312,18 @@ def main():
     required_classes = [coraplex.plans.plan_node.UnderspecifiedNode, ActionDescription]
     results = []
     for class_drop_probability in tqdm.tqdm(
-        [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0]
+        [
+            # 0.9,
+            # 0.8,
+            # 0.7,
+            # 0.6,
+            # 0.5,
+            # 0.4,
+            # 0.3,
+            # 0.2,
+            # 0.1,
+            0.0,
+        ]
     ):
         results.append(
             run_scalability_experiment(

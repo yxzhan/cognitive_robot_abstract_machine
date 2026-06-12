@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 from dataclasses import dataclass, field
 from typing_extensions import TextIO, TYPE_CHECKING
 
-import black
 import jinja2
 
 if TYPE_CHECKING:
@@ -46,16 +46,14 @@ class SQLAlchemyGenerator:
 
         :param file: The file to write to
         """
-        # Load the template
         template = self.env.get_template("sqlalchemy_model.py.jinja")
 
-        # Render the template
-        output = template.render(
-            ormatic=self.ormatic,
+        output = template.render(ormatic=self.ormatic)
+
+        result = subprocess.run(
+            ["ruff", "format", "--stdin-filename", "output.py", "-"],
+            input=output, capture_output=True, text=True, check=True,
         )
+        output = result.stdout
 
-        # Format with black in-process (avoids subprocess spawn overhead)
-        output = black.format_str(output, mode=black.Mode())
-
-        # Write the output to the file
         file.write(output)
