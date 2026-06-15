@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, MISSING
 from functools import lru_cache
 from typing import Tuple
 
@@ -315,6 +315,21 @@ class HasRootRegion(HasRootKinematicStructureEntity, ABC):
         )
 
 
+def composition_field(*, default=MISSING, default_factory=MISSING, **kwargs):
+    """
+    Declare a dataclass field as a composition slot for :meth:`CompositionMixin.add`.
+
+    Marks the field's metadata with ``"composition": True`` so slot discovery can find it
+    locally, independent of where the field is declared in the class hierarchy. Accepts the same
+    keyword arguments as :func:`dataclasses.field` (``hash``, ``kw_only``, ...), merging any
+    caller-provided ``metadata`` with the composition marker.
+    """
+    metadata = {**kwargs.pop("metadata", {}), "composition": True}
+    return field(
+        default=default, default_factory=default_factory, metadata=metadata, **kwargs
+    )
+
+
 @dataclass
 class _CompositionFieldSpecification:
     field_name: str
@@ -329,23 +344,18 @@ def _composition_field_specifications(
     """
     Resolve the composition slots of ``cls`` as ``(field_name, element_type, is_plural)`` tuples.
 
-    Composition slots are the dataclass fields declared on the part mixins that inherit *directly*
-    from :class:`CompositionMixin` (e.g. ``HasHandle.handle``), not the fields a concrete annotation
-    merely adds on top while inheriting such a mixin (e.g. ``Door.entry_way``). Memoized per class
-    because the slot set is immutable and resolving it re-introspects the whole dataclass.
+    Composition slots are the dataclass fields declared with :func:`composition_field` (whose
+    metadata carries ``"composition": True``), e.g. ``HasHandle.handle``; a field a concrete
+    annotation merely adds on top with a plain :func:`dataclasses.field` (e.g. ``Door.entry_way``)
+    is not a slot. Memoized per class because the slot set is immutable and resolving it
+    re-introspects the whole dataclass.
     """
-    slot_names = {
-        name
-        for clazz in cls.__mro__
-        if CompositionMixin in clazz.__bases__
-        for name in vars(clazz).get("__annotations__", {})
-    }
     return [
         _CompositionFieldSpecification(
             wf.name, wf.type_endpoint, wf.is_one_to_many_relationship
         )
         for wf in WrappedClass(cls).fields
-        if wf.name in slot_names
+        if wf.field.metadata.get("composition")
     ]
 
 
@@ -394,7 +404,9 @@ class HasApertures(HasRootBody, CompositionMixin, ABC):
     A mixin class for semantic annotations that have apertures.
     """
 
-    apertures: List[Aperture] = field(default_factory=list, hash=False, kw_only=True)
+    apertures: List[Aperture] = composition_field(
+        default_factory=list, hash=False, kw_only=True
+    )
     """
     The apertures of the semantic annotation.
     """
@@ -406,7 +418,7 @@ class HasMechanicalJoint(HasRootBody, CompositionMixin, ABC):
     A mixin class for semantic annotations that have mechanical joints.
     """
 
-    mechanical_joint: Optional[MechanicalJoint] = field(default=None)
+    mechanical_joint: Optional[MechanicalJoint] = composition_field(default=None)
     """
     The mechanical joint of the semantic annotation.
     """
@@ -431,7 +443,9 @@ class HasDrawers(CompositionMixin, ABC):
     A mixin class for semantic annotations that have drawers.
     """
 
-    drawers: List[Drawer] = field(default_factory=list, hash=False, kw_only=True)
+    drawers: List[Drawer] = composition_field(
+        default_factory=list, hash=False, kw_only=True
+    )
     """
     The drawers of the semantic annotation.
     """
@@ -443,7 +457,9 @@ class HasDoors(CompositionMixin, ABC):
     A mixin class for semantic annotations that have doors.
     """
 
-    doors: List[Door] = field(default_factory=list, hash=False, kw_only=True)
+    doors: List[Door] = composition_field(
+        default_factory=list, hash=False, kw_only=True
+    )
     """
     The doors of the semantic annotation.
     """
@@ -455,7 +471,7 @@ class HasHandle(HasRootBody, CompositionMixin, ABC):
     A mixin class for semantic annotations that have a handle.
     """
 
-    handle: Optional[Handle] = None
+    handle: Optional[Handle] = composition_field(default=None)
     """
     The handle of the semantic annotation.
     """

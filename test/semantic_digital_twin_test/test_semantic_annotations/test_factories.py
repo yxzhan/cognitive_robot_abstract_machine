@@ -24,6 +24,7 @@ from semantic_digital_twin.orm.ormatic_interface import *
 from semantic_digital_twin.semantic_annotations.mixins import (
     CompositionMixin,
     HasRootBody,
+    composition_field,
 )
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasCaseAsRootBody,
@@ -973,8 +974,8 @@ class _HostWithOverlappingSlots(HasRootBody, CompositionMixin):
     (``Hinge`` is a subclass of ``MechanicalJoint``), so a ``Hinge`` matches both.
     """
 
-    joint: Optional[MechanicalJoint] = None
-    specific_joint: Optional[Hinge] = None
+    joint: Optional[MechanicalJoint] = composition_field(default=None)
+    specific_joint: Optional[Hinge] = composition_field(default=None)
 
 
 def _world_with_root() -> World:
