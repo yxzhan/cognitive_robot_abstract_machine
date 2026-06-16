@@ -382,9 +382,7 @@ class PartWholeRelationship(HasRootKinematicStructureEntity, ABC):
     """
 
     @synchronized_attribute_modification
-    def add(
-        self, part: HasRootKinematicStructureEntity, field_name: str = ""
-    ) -> None:
+    def add(self, part: HasRootKinematicStructureEntity, field_name: str = "") -> None:
         """
         Add ``part`` as a structural part, routing it to the matching part-whole relationship field
         by type.
