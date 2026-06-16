@@ -16387,10 +16387,6 @@ class AmbiguousPartDAO(
         use_existing_column=True,
     )
 
-    fields: Mapped[typing.List[builtins.str]] = mapped_column(
-        JSON, nullable=False, use_existing_column=True
-    )
-
     annotation_id: Mapped[int] = mapped_column(
         ForeignKey("SemanticAnnotationDAO.database_id", use_alter=True),
         nullable=True,
@@ -27999,30 +27995,6 @@ class _MultiSimStateCallbackDAO(
         "polymorphic_identity": "_MultiSimStateCallbackDAO",
         "inherit_condition": database_id == StateChangeCallbackDAO.database_id,
     }
-
-
-class _PartWholeRelationshipFieldSpecificationDAO(
-    Base,
-    DataAccessObject[
-        semantic_digital_twin.semantic_annotations.mixins._PartWholeRelationshipFieldSpecification
-    ],
-):
-    __tablename__ = "_PartWholeRelationshipFieldSpecificationDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    field_name: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    is_one_to_many_relationship: Mapped[builtins.bool] = mapped_column(
-        use_existing_column=True
-    )
-
-    element_type: Mapped[TypeType] = mapped_column(
-        TypeType, nullable=False, use_existing_column=True
-    )
 
 
 class _SelfCollisionAvoidanceNodeDAO(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, MISSING, Field
 from functools import lru_cache
@@ -17,6 +19,7 @@ from typing_extensions import (
 )
 
 from krrood.class_diagrams.class_diagram import WrappedClass
+from krrood.class_diagrams.wrapped_field import WrappedField
 from krrood.entity_query_language.factories import variable_from, entity, variable, an
 from krrood.ormatic.utils import classproperty
 from probabilistic_model.distributions.gaussian import GaussianDistribution
@@ -318,35 +321,32 @@ class HasRootRegion(HasRootKinematicStructureEntity, ABC):
         )
 
 
-def part_whole_relationship_field(
-    *, default=MISSING, default_factory=MISSING, **kwargs
-):
+class PartWholeRelationshipField(dataclasses.Field):
     """
-    Declare a dataclass field as a part-whole relationship field for
-    :meth:`PartWholeRelationship.add`.
-
-    Marks the field's metadata with ``"part_whole_relationship": True`` so the field discovery can
-    find it locally, independent of where the field is declared in the class hierarchy. Accepts the
-    same keyword arguments as :func:`dataclasses.field` (``hash``, ``kw_only``, ...), merging any
-    caller-provided ``metadata`` with the part-whole relationship marker.
+    Used to mark PartWhole relationships for specific dataclass fields so that we can identify them later on.
     """
-    metadata = {**kwargs.pop("metadata", {}), "part_whole_relationship": True}
-    return field(
-        default=default, default_factory=default_factory, metadata=metadata, **kwargs
-    )
 
 
-@dataclass
-class _PartWholeRelationshipFieldSpecification:
-    field_: Field
-    element_type: Type[HasRootKinematicStructureEntity]
-    is_one_to_many_relationship: bool
+def part_whole_relationship_field(**overrides):
+    """
+    Factory method for class PartWholeRelationshipField(dataclasses.Field)
+    """
+    params = inspect.signature(dataclasses.field).parameters
+
+    kwargs = {
+        name: param.default
+        for name, param in params.items()
+        if param.default is not inspect.Parameter.empty
+    }
+    kwargs.update(overrides)
+
+    return PartWholeRelationshipField(**kwargs)
 
 
 @lru_cache(maxsize=None)
-def _part_whole_relationship_field_specifications(
+def _wrapped_part_whole_relationship_fields(
     cls: Type[PartWholeRelationship],
-) -> list[_PartWholeRelationshipFieldSpecification]:
+) -> list[WrappedField]:
     """
     Resolve the part-whole relationship fields of ``cls`` as ``(field_name, element_type,
     is_plural)`` tuples.
@@ -359,11 +359,11 @@ def _part_whole_relationship_field_specifications(
     resolving it re-introspects the whole dataclass.
     """
     return [
-        _PartWholeRelationshipFieldSpecification(
-            wf.field, wf.type_endpoint, wf.is_one_to_many_relationship
+        wrapped_part_whole_relationship_field
+        for wrapped_part_whole_relationship_field in WrappedClass(cls).fields
+        if isinstance(
+            wrapped_part_whole_relationship_field.field, PartWholeRelationshipField
         )
-        for wf in WrappedClass(cls).fields
-        if wf.field.metadata.get("part_whole_relationship")
     ]
 
 
@@ -389,25 +389,23 @@ class PartWholeRelationship(HasRootKinematicStructureEntity, ABC):
         :raises AmbiguousPart: If ``type(part)`` matches more than one part-whole relationship field.
         """
         matches = [
-            part_whole_relationship_field_specification
-            for part_whole_relationship_field_specification in _part_whole_relationship_field_specifications(
+            wrapped_part_whole_relationship_field
+            for wrapped_part_whole_relationship_field in _wrapped_part_whole_relationship_fields(
                 type(self)
             )
-            if isinstance(
-                part, part_whole_relationship_field_specification.element_type
-            )
+            if isinstance(part, wrapped_part_whole_relationship_field.type_endpoint)
         ]
         if not matches:
             raise CannotBeAPartOf(self, part)
         if len(matches) > 1:
-            raise AmbiguousPart(self, part, [match.field_ for match in matches])
+            raise AmbiguousPart(self, part, [match.field for match in matches])
 
         [match] = matches
         part._mount_strategy(self)
         if match.is_one_to_many_relationship:
-            getattr(self, match.field_.name).append(part)
+            getattr(self, match.field.name).append(part)
         else:
-            setattr(self, match.field_.name, part)
+            setattr(self, match.field.name, part)
 
 
 @dataclass(eq=False)
@@ -505,7 +503,9 @@ class IsStorageSpace(HasRootBody, ABC):
 
     @synchronized_attribute_modification
     def add_object(self, object: HasRootBody):
-        self._world.move_branch(object.root, self.root, True)
+        self._world.move_branch(
+            object.root, self.root, computing_inside_modify_world_block=True
+        )
         self.objects.append(object)
 
     def get_objects_of_type(
@@ -659,7 +659,9 @@ class HasSupportingSurface(IsStorageSpace, ABC):
 
     @synchronized_attribute_modification
     def add_supporting_surface(self, region: Region):
-        self._world.move_branch(region, self.root, True)
+        self._world.move_branch(
+            region, self.root, computing_inside_modify_world_block=True
+        )
         self.supporting_surface = region
 
     def sample_points_from_surface(

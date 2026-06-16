@@ -34,7 +34,8 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Slider,
 )
 from semantic_digital_twin.semantic_annotations.mixins import (
-    _part_whole_relationship_field_specifications,
+    _wrapped_part_whole_relationship_fields,
+    PartWholeRelationshipField,
 )
 from semantic_digital_twin.orm.ormatic_interface import *
 from krrood.ormatic.data_access_objects.helper import to_dao
@@ -169,15 +170,15 @@ def test_pr2_semantic_annotation_and_safe_to_db(
     session.commit()
 
 
-def _field_metadata(annotation_type, field_name):
-    """Return the dataclass-field metadata dict for ``field_name`` on ``annotation_type``."""
-    return {f.name: f for f in dataclasses.fields(annotation_type)}[field_name].metadata
+def _field(annotation_type, field_name):
+    """Return the dataclass ``Field`` object for ``field_name`` on ``annotation_type``."""
+    return {f.name: f for f in dataclasses.fields(annotation_type)}[field_name]
 
 
 def test_part_whole_relationship_field_metadata_survives_orm_round_trip(session):
     """
-    The ``part_whole_relationship`` marker is stored in a field's ``metadata`` and lives on the
-    dataclass definition, not in the persisted row (ORMatic never reads ``field.metadata``).
+    The part-whole relationship marker is the field's ``PartWholeRelationshipField`` type and lives
+    on the dataclass definition, not in the persisted row (ORMatic never inspects the field type).
     Reconstructing an annotation from its DAO must therefore yield an instance whose type still
     carries the marker, the marked-field discovery must still find it, and the field *values*
     (handle, mechanical_joint) must survive the round trip.
@@ -200,11 +201,8 @@ def test_part_whole_relationship_field_metadata_survives_orm_round_trip(session)
         drawer.add(slider)
 
     # The marker is present on the source class before persisting.
-    assert _field_metadata(Drawer, "handle").get("part_whole_relationship") is True
-    assert (
-        _field_metadata(Drawer, "mechanical_joint").get("part_whole_relationship")
-        is True
-    )
+    assert isinstance(_field(Drawer, "handle"), PartWholeRelationshipField)
+    assert isinstance(_field(Drawer, "mechanical_joint"), PartWholeRelationshipField)
 
     world_dao: WorldMappingDAO = to_dao(world)
     session.add(world_dao)
@@ -215,25 +213,18 @@ def test_part_whole_relationship_field_metadata_survives_orm_round_trip(session)
 
     # The reconstructed object is a real Drawer, so its fields still carry the marker.
     assert isinstance(reconstructed_drawer, Drawer)
-    assert (
-        _field_metadata(type(reconstructed_drawer), "handle").get(
-            "part_whole_relationship"
-        )
-        is True
+    assert isinstance(
+        _field(type(reconstructed_drawer), "handle"), PartWholeRelationshipField
     )
-    assert (
-        _field_metadata(type(reconstructed_drawer), "mechanical_joint").get(
-            "part_whole_relationship"
-        )
-        is True
+    assert isinstance(
+        _field(type(reconstructed_drawer), "mechanical_joint"),
+        PartWholeRelationshipField,
     )
 
     # The marked-field discovery still resolves the same part-whole relationship fields.
     discovered = {
-        spec.field_name
-        for spec in _part_whole_relationship_field_specifications(
-            type(reconstructed_drawer)
-        )
+        spec.field.name
+        for spec in _wrapped_part_whole_relationship_fields(type(reconstructed_drawer))
     }
     assert {"handle", "mechanical_joint"} <= discovered
 

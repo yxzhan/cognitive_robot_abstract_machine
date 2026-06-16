@@ -18751,27 +18751,6 @@ class _MultiSimStateCallbackDAO(
     }
 
 
-class _PartWholeRelationshipFieldSpecificationDAO(
-    Base,
-    DataAccessObject[
-        semantic_digital_twin.semantic_annotations.mixins._PartWholeRelationshipFieldSpecification
-    ],
-):
-    __tablename__ = "_PartWholeRelationshipFieldSpecificationDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    is_one_to_many_relationship: Mapped[builtins.bool] = mapped_column(
-        use_existing_column=True
-    )
-
-    element_type: Mapped[TypeType] = mapped_column(
-        TypeType, nullable=False, use_existing_column=True
-    )
-
-
 class FunctionMappingDAO(
     Base,
     DataAccessObject[

@@ -234,8 +234,11 @@ class MechanicalJoint(HasRootBody):
 
     def _mount_strategy(self, main_has_root_body_annotation: HasRootBody) -> None:
         """
-        Splices the joint between the whole (``main_has_root_body_annotation``) and the whole's
-        current parent, preserving the whole's ancestry:
+        Inserts the joint between the whole (``main_has_root_body_annotation``) and the whole's
+        current parent, preserving the whole's ancestry.
+        So
+        whole_parent -(fixed)-> whole
+        becomes
         whole_parent -(active)-> joint -(fixed)-> whole. The joint keeps its active connection
         (now anchored at the whole's parent); the whole hangs rigidly off the joint.
         """
@@ -251,7 +254,7 @@ class MechanicalJoint(HasRootBody):
         self._world.move_branch(
             self.root,
             main_has_root_body_annotation.root.parent_kinematic_structure_entity,
-            True,
+            computing_inside_modify_world_block=True,
         )
         main_has_root_body_annotation._world.move_branch(
             main_has_root_body_annotation.root, self.root, True
