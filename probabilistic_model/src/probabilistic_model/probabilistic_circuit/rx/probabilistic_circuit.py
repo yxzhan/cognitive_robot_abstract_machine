@@ -49,29 +49,31 @@ from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, fro
 from random_events.variable import Variable, Symbolic, Continuous, Integer
 
 
-def logsumexp(a, axis=None):
+def logsumexp(values, axis=None):
     """
-    Numerically stable log-sum-exp.
+    Numerically stable logarithm of a sum of exponentials.
 
-    A lightweight drop-in for :func:`scipy.special.logsumexp` for the cases used
-    in this module (a list/array reduced over ``axis``, or a 1-D array reduced
-    over everything). scipy's implementation carries large per-call dispatch
-    overhead that dominates the circuit inference loops, where this is called
-    once per sum unit per query.
+    This is a lightweight drop-in for :func:`scipy.special.logsumexp` covering the
+    cases used in this module (a list or array reduced over ``axis``, or a
+    one-dimensional array reduced over everything). scipy's implementation carries
+    large per-call dispatch overhead that dominates the circuit inference loops,
+    where this function is called once per sum unit per query.
 
-    :param a: The values to reduce. May be a list of scalars/arrays.
+    :param values: The values to reduce. May be a list of scalars or arrays.
     :param axis: The axis to reduce over, or ``None`` to reduce over all entries.
-    :return: ``log(sum(exp(a)))`` reduced over ``axis``.
+    :return: ``log(sum(exp(values)))`` reduced over ``axis``.
     """
-    a = np.asarray(a, dtype=float)
-    amax = np.amax(a, axis=axis, keepdims=True)
-    # avoid nan when a whole reduction is -inf (or +inf): subtract 0 instead
-    amax = np.where(np.isfinite(amax), amax, 0.0)
+    values = np.asarray(values, dtype=float)
+    maximum = np.amax(values, axis=axis, keepdims=True)
+    # avoid NaN when a whole reduction is -inf (or +inf): subtract 0.0 instead
+    maximum = np.where(np.isfinite(maximum), maximum, 0.0)
     with np.errstate(divide="ignore"):
-        out = np.log(np.sum(np.exp(a - amax), axis=axis, keepdims=True)) + amax
+        result = (
+            np.log(np.sum(np.exp(values - maximum), axis=axis, keepdims=True)) + maximum
+        )
     if axis is None:
-        return out.reshape(())[()]
-    return np.squeeze(out, axis=axis)
+        return result.reshape(())[()]
+    return np.squeeze(result, axis=axis)
 
 
 class PlotAlignment(IntEnum):
@@ -514,10 +516,19 @@ class SumUnit(InnerUnit):
         return np.array([weight for weight, _ in self.log_weighted_subcircuits])
 
     def sample(self, *args, **kwargs):
+        """
+        Route the sample rows accumulated from this unit's parents to its subcircuits.
+
+        Every row routed to a mixture is assigned to exactly one subcircuit, drawn
+        according to the subcircuit weights. The rows are partitioned in a single
+        multinomial draw rather than once per parent request, which keeps the work
+        proportional to the number of samples instead of the number of paths through
+        the circuit.
+        """
         if not self.result_of_current_query:
             return
 
-        # all rows routed to this unit by its parents
+        # all sample rows routed to this unit by its parents
         rows = np.concatenate(self.result_of_current_query)
         if len(rows) == 0:
             return
@@ -844,9 +855,16 @@ class ProductUnit(InnerUnit):
                     subcircuit.add_subcircuit(sub_subcircuit)
 
     def sample(self, *args, **kwargs):
+        """
+        Route the sample rows accumulated from this unit's parents to its subcircuits.
+
+        A decomposable product factorizes over disjoint variables, so every sample
+        row is forwarded unchanged to each subcircuit; the subcircuits then fill in
+        their respective columns of the same rows.
+        """
         if not self.result_of_current_query:
             return
-        # a decomposable product routes every one of its rows to each child
+        # a decomposable product routes every one of its rows to each subcircuit
         rows = np.concatenate(self.result_of_current_query)
         if len(rows) == 0:
             return
@@ -1267,6 +1285,14 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         """
         Reference implementation of truncation over a composite event: deep-copy and
         truncate the circuit once per simple set, then combine the results.
+
+        This is the fallback used when the circuit contains non-continuous leaves,
+        for which the vectorized path is not applicable.
+
+        :param event: The event to truncate the circuit to.
+        :param singleton_allowed: Whether singleton intervals are allowed.
+        :return: This circuit (now truncated) and the log-probability of the event,
+            or ``(None, -inf)`` if the event has zero probability.
         """
         conditional_circuits = list(
             self.__deepcopy__().log_truncated_of_simple_event_in_place(
@@ -1318,7 +1344,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         :return: A mapping from node index to a ``(len(simple_events),)`` array of
             log-probabilities.
         """
-        k = len(simple_events)
+        number_of_simple_events = len(simple_events)
         log_probabilities: Dict[int, npt.NDArray] = {}
 
         for layer in reversed(self.layers):
@@ -1326,38 +1352,53 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
                 if isinstance(unit, LeafUnit):
                     distribution = unit.distribution
                     variable = distribution.variables[0]
-                    lowers, uppers, box_index = [], [], []
-                    for index, simple_event in enumerate(simple_events):
+
+                    # collect the bounds of every simple interval of every simple
+                    # event so the cumulative distribution function is evaluated once
+                    lower_bounds, upper_bounds, simple_event_indices = [], [], []
+                    for simple_event_index, simple_event in enumerate(simple_events):
                         for simple_interval in simple_event[variable].simple_sets:
-                            lowers.append(simple_interval.lower)
-                            uppers.append(simple_interval.upper)
-                            box_index.append(index)
-                    if lowers:
-                        lower = np.asarray(lowers, dtype=float).reshape(-1, 1)
-                        upper = np.asarray(uppers, dtype=float).reshape(-1, 1)
-                        probabilities = distribution.cumulative_distribution_function(
-                            upper
-                        ) - distribution.cumulative_distribution_function(lower)
-                        per_box = np.bincount(
-                            np.asarray(box_index, dtype=np.intp),
-                            weights=probabilities,
-                            minlength=k,
+                            lower_bounds.append(simple_interval.lower)
+                            upper_bounds.append(simple_interval.upper)
+                            simple_event_indices.append(simple_event_index)
+
+                    if lower_bounds:
+                        lower_bound = np.asarray(lower_bounds, dtype=float).reshape(-1, 1)
+                        upper_bound = np.asarray(upper_bounds, dtype=float).reshape(-1, 1)
+                        interval_probabilities = (
+                            distribution.cumulative_distribution_function(upper_bound)
+                            - distribution.cumulative_distribution_function(lower_bound)
+                        )
+                        # a simple event's probability is the sum over its intervals
+                        probability_per_simple_event = np.bincount(
+                            np.asarray(simple_event_indices, dtype=np.intp),
+                            weights=interval_probabilities,
+                            minlength=number_of_simple_events,
                         )
                     else:
-                        per_box = np.zeros(k)
+                        probability_per_simple_event = np.zeros(number_of_simple_events)
+
                     with np.errstate(divide="ignore"):
-                        log_probabilities[unit.index] = np.log(per_box)
+                        log_probabilities[unit.index] = np.log(
+                            probability_per_simple_event
+                        )
                 elif isinstance(unit, ProductUnit):
-                    accumulator = np.zeros(k)
+                    # a decomposable product factorizes, so log-probabilities add
+                    accumulated_log_probabilities = np.zeros(number_of_simple_events)
                     for subcircuit in unit.subcircuits:
-                        accumulator = accumulator + log_probabilities[subcircuit.index]
-                    log_probabilities[unit.index] = accumulator
+                        accumulated_log_probabilities = (
+                            accumulated_log_probabilities
+                            + log_probabilities[subcircuit.index]
+                        )
+                    log_probabilities[unit.index] = accumulated_log_probabilities
                 else:  # SumUnit
-                    weighted = [
+                    weighted_log_probabilities = [
                         log_weight + log_probabilities[subcircuit.index]
                         for log_weight, subcircuit in unit.log_weighted_subcircuits
                     ]
-                    log_probabilities[unit.index] = logsumexp(weighted, axis=0)
+                    log_probabilities[unit.index] = logsumexp(
+                        weighted_log_probabilities, axis=0
+                    )
 
         return log_probabilities
 
@@ -1372,6 +1413,10 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         Truncate a continuous distribution to ``interval`` and create the resulting
         node(s) in ``target``. Composite intervals create a normalized sum unit.
 
+        :param distribution: The continuous distribution to truncate.
+        :param interval: The interval to truncate the distribution to.
+        :param target: The circuit that the newly created node(s) are added to.
+        :param singleton_allowed: Whether singleton intervals are allowed.
         :return: The created node, or ``None`` if the truncation is impossible.
         """
         simple_intervals = interval.simple_sets
@@ -1408,7 +1453,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
     def _build_conditional_branch(
         self,
         simple_event: SimpleEvent,
-        box_index: int,
+        simple_event_index: int,
         log_probabilities: Dict[int, npt.NDArray],
         target: "ProbabilisticCircuit",
         singleton_allowed: bool,
@@ -1417,80 +1462,105 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         Build the circuit truncated to a single simple set inside ``target`` using the
         pre-computed per-node log-probabilities. Nodes with zero probability are pruned.
 
-        :return: The root node of the truncated branch in ``target``, or ``None``.
+        :param simple_event: The simple set to truncate the circuit to.
+        :param simple_event_index: The index of ``simple_event`` in the per-node
+            log-probability arrays returned by :meth:`_truncation_log_probabilities`.
+        :param log_probabilities: The per-node log-probabilities of every simple set.
+        :param target: The circuit that the newly created nodes are added to.
+        :param singleton_allowed: Whether singleton intervals are allowed.
+        :return: The root node of the truncated branch in ``target``, or ``None`` if
+            the whole circuit assigns zero probability to ``simple_event``.
         """
-        built: Dict[int, Optional[Unit]] = {}
+        built_nodes: Dict[int, Optional[Unit]] = {}
 
         for layer in reversed(self.layers):
             for unit in layer:
-                if log_probabilities[unit.index][box_index] == -np.inf:
-                    built[unit.index] = None
+                # prune nodes that assign zero probability to this simple set
+                if log_probabilities[unit.index][simple_event_index] == -np.inf:
+                    built_nodes[unit.index] = None
                     continue
 
                 if isinstance(unit, LeafUnit):
                     variable = unit.distribution.variables[0]
-                    built[unit.index] = self._truncate_continuous_leaf(
+                    built_nodes[unit.index] = self._truncate_continuous_leaf(
                         unit.distribution,
                         simple_event[variable],
                         target,
                         singleton_allowed,
                     )
                 elif isinstance(unit, ProductUnit):
-                    children = [built[c.index] for c in unit.subcircuits]
-                    if any(child is None for child in children):
-                        built[unit.index] = None
+                    built_subcircuits = [
+                        built_nodes[subcircuit.index]
+                        for subcircuit in unit.subcircuits
+                    ]
+                    # a product is impossible if any of its factors is impossible
+                    if any(
+                        built_subcircuit is None
+                        for built_subcircuit in built_subcircuits
+                    ):
+                        built_nodes[unit.index] = None
                     else:
-                        new_product = ProductUnit(probabilistic_circuit=target)
-                        for child in children:
-                            new_product.add_subcircuit(child)
-                        built[unit.index] = new_product
+                        truncated_product = ProductUnit(probabilistic_circuit=target)
+                        for built_subcircuit in built_subcircuits:
+                            truncated_product.add_subcircuit(built_subcircuit)
+                        built_nodes[unit.index] = truncated_product
                 else:  # SumUnit
-                    new_sum = SumUnit(probabilistic_circuit=target)
-                    has_child = False
-                    for log_weight, child in unit.log_weighted_subcircuits:
-                        built_child = built[child.index]
-                        if built_child is None:
+                    truncated_sum = SumUnit(probabilistic_circuit=target)
+                    has_viable_subcircuit = False
+                    for log_weight, subcircuit in unit.log_weighted_subcircuits:
+                        built_subcircuit = built_nodes[subcircuit.index]
+                        if built_subcircuit is None:
                             continue
-                        new_sum.add_subcircuit(
-                            built_child,
-                            log_weight + log_probabilities[child.index][box_index],
+                        # posterior weight: prior weight times the subcircuit's
+                        # probability of the simple set (Bayes' rule, in log-space)
+                        truncated_sum.add_subcircuit(
+                            built_subcircuit,
+                            log_weight
+                            + log_probabilities[subcircuit.index][simple_event_index],
                         )
-                        has_child = True
-                    if not has_child:
-                        target.remove_node(new_sum)
-                        built[unit.index] = None
+                        has_viable_subcircuit = True
+                    if not has_viable_subcircuit:
+                        target.remove_node(truncated_sum)
+                        built_nodes[unit.index] = None
                     else:
-                        new_sum.normalize()
-                        built[unit.index] = new_sum
+                        truncated_sum.normalize()
+                        built_nodes[unit.index] = truncated_sum
 
-        return built[self.root.index]
+        return built_nodes[self.root.index]
 
     def _log_truncated_in_place_vectorized(
         self, event: Event, singleton_allowed: bool = False
     ) -> Tuple[Optional[Self], float]:
         """
-        Truncation over a composite event for circuits with continuous leaves only.
+        Truncate the circuit to a composite event, for circuits with continuous
+        leaves only.
 
-        Computes the probability of every simple set in one vectorized pass and builds
-        the resulting mixture in a single structural sweep, avoiding the per-simple-set
-        deep-copies and forward passes of the reference implementation.
+        The probability of every simple set is computed in one vectorized pass and the
+        resulting mixture is built in a single structural sweep, avoiding the
+        per-simple-set deep-copies and forward passes of
+        :meth:`_log_truncated_in_place_per_simple_event`.
+
+        :param event: The event to truncate the circuit to.
+        :param singleton_allowed: Whether singleton intervals are allowed.
+        :return: This circuit (now truncated) and the log-probability of the event,
+            or ``(None, -inf)`` if the event has zero probability.
         """
         simple_events = list(event.simple_sets)
         log_probabilities = self._truncation_log_probabilities(simple_events)
         root_log_probabilities = log_probabilities[self.root.index]
 
-        viable = [
+        viable_indices = [
             index
             for index in range(len(simple_events))
             if root_log_probabilities[index] > -np.inf
         ]
-        if not viable:
+        if not viable_indices:
             self.remove_nodes_from(list(self.graph.nodes()))
             return None, -np.inf
 
-        # build each viable branch in its own circuit (reads self read-only)
+        # build each viable branch in its own circuit (this reads self read-only)
         branches: List[Tuple[ProbabilisticCircuit, Unit, float]] = []
-        for index in viable:
+        for index in viable_indices:
             branch_circuit = ProbabilisticCircuit()
             branch_root = self._build_conditional_branch(
                 simple_events[index],
@@ -1504,19 +1574,19 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
                 (branch_circuit, branch_root, root_log_probabilities[index])
             )
 
-        # clear this circuit and assemble the mixture
+        # clear this circuit and assemble the mixture over the viable branches
         self.remove_nodes_from(list(self.graph.nodes()))
         result = SumUnit(probabilistic_circuit=self)
         for branch_circuit, branch_root, log_probability in branches:
             new_nodes = self.add_from_subgraph(branch_circuit.graph)
             result.add_subcircuit(new_nodes[branch_root.index], log_probability)
 
+        # the simple sets of an event are disjoint, so P(E) = sum_k P(E_k)
         total_log_probability = logsumexp(
             np.array([log_probability for _, _, log_probability in branches])
         )
         result.normalize()
         return self, total_log_probability
-
 
     def log_truncated(
         self, event: Event, singleton_allowed: bool = False
