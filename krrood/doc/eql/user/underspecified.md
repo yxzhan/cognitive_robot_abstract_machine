@@ -59,6 +59,11 @@ An `Ellipsis` marks the field as *unconstrained*.  The backend samples a value f
 from the **marginal** of the probabilistic model — no restriction is applied.  Use `...` whenever
 you genuinely have no prior knowledge about a field.
 
+```{important}
+`...` can only be used on **primitive (leaf) fields** such as `float`, `int`, `str`, or `bool`.
+Do not set a structured/nested field to `...`; nest another `underspecified(...)` call instead.
+```
+
 ### Concrete literal — conditioning assignment
 
 ```python
@@ -84,10 +89,8 @@ from krrood.entity_query_language.factories import variable
 query = underspecified(KRROODPosition)(x=..., y=..., z=variable(int, domain=[1, 2, 3]))
 ```
 
-A KRROOD {py:func}`~krrood.entity_query_language.factories.variable` restricts the field to a
-discrete set of values. Internally this becomes a **truncation event** that cuts the marginal
-distribution for `z` to the set `{1, 2, 3}` before sampling.  All other dimensions remain
-unaffected.
+A KRROOD {py:func}`~krrood.entity_query_language.factories.variable` passes the field's domain
+as a **truncation constraint** to the model.  All other dimensions remain unaffected.
 
 ---
 
@@ -127,6 +130,15 @@ query.where(query.variable.position.x > 0.5)   # ← .where(): truncate the cond
 
 Here `orientation` is fixed via kwargs (Bayesian conditioning), while `x > 0.5` is a
 post-conditioning truncation because it describes a half-open interval rather than a single value.
+
+```{note}
+**Performance of `.where()` conditions depends on the algebra of the constraint.**
+If your condition belongs to the *product algebra* (axis-aligned box constraints such as
+`x > 0.5` or `z in {1, 2, 3}`), the truncation is computed exactly and sampling remains fast.
+Conditions that fall *outside* the product algebra (e.g. `field_a > field_b`) cannot be
+expressed as a closed-form event and require **rejection sampling**, which is slower and may
+need many more samples to produce the requested number of results.
+```
 
 ---
 
@@ -197,7 +209,7 @@ Each level of nesting introduces its own field constraints independently:
 
 ```python
 query = underspecified(NestedAction)(
-    obj=variable(Apple, domain=[apple]),               # truncate: only this apple
+    obj=apple,                                         # condition: exactly this apple instance
     pose=underspecified(Pose)(
         position=underspecified(Position)(
             x=0.02,                                    # condition: x is exactly 0.02
@@ -212,7 +224,9 @@ query = underspecified(NestedAction)(
 )
 ```
 
-- `obj` is truncated to `[apple]` — only that specific `Apple` instance can appear.
+- `obj=apple` is a **literal** — it conditions the model on that exact `Apple` instance.
+  Using `variable(Apple, domain=[apple])` would instead create a truncation constraint, which
+  has different probabilistic semantics.
 - `position.x = 0.02` conditions the model: `P(y, z, orientation | x=0.02)`.
 - `orientation.w` is truncated to `{0.0, 1.0}`.
 - All remaining fields are sampled freely.
