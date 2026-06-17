@@ -132,14 +132,17 @@ class MotionExecutor:
         while True:
             if self.plan_node.is_paused:
                 raise NotImplementedError("Pause not implemented for real execution")
-            elif self.plan_node.is_interrupted or kill_event.is_set():
+            elif self.plan_node.is_interrupted:
                 giskard_wrapper.cancel_goal_async()
+                break
+            elif kill_event.is_set():
+                break
             time.sleep(0.01)
 
     def _execute_for_real(self):
         from giskardpy.middleware.ros2.python_interface import GiskardWrapper
 
-        giskard = GiskardWrapper(self.ros_node)
+        giskard = GiskardWrapper(self.ros_node, world=self.world)
 
         kill_event = threading.Event()
         interrupt_thread = threading.Thread(
