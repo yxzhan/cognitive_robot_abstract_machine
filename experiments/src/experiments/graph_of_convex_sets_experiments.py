@@ -19,6 +19,8 @@ three runs.
 Run with::
 
     python -m experiments.graph_of_convex_sets_experiments
+
+
 """
 
 from __future__ import annotations
@@ -161,6 +163,7 @@ def _to_mean_and_standard_deviation_milliseconds(
     :type elapsed_seconds: list[float]
     :returns: Mean and standard deviation of the samples converted to
         milliseconds.
+
     """
     return MeanAndStandardDeviation.from_measurements(
         [seconds * 1000.0 for seconds in elapsed_seconds]
@@ -387,6 +390,7 @@ def main():
     printed as a Typst ``#table`` block ready for inclusion in a
     scientific article. Progress is tracked via tqdm progress bars.
     """
+
     urdf_directory_path = (
         Path(__file__).parent
         / ".."
