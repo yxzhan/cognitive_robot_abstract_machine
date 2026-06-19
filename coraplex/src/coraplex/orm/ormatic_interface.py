@@ -564,10 +564,14 @@ class MotionExecutorDAO_motions_association(Base, AssociationDataAccessObject):
     source_motionexecutordao_id: Mapped[int] = mapped_column(
         ForeignKey("MotionExecutorDAO.database_id")
     )
-    target_taskdao_id: Mapped[int] = mapped_column(ForeignKey("TaskDAO.database_id"))
+    target_motionstatechartnodedao_id: Mapped[int] = mapped_column(
+        ForeignKey("MotionStatechartNodeDAO.database_id")
+    )
 
-    target: Mapped[TaskDAO] = relationship(
-        "TaskDAO", foreign_keys=[target_taskdao_id], lazy="selectin"
+    target: Mapped[MotionStatechartNodeDAO] = relationship(
+        "MotionStatechartNodeDAO",
+        foreign_keys=[target_motionstatechartnodedao_id],
+        lazy="selectin",
     )
 
 

@@ -5,7 +5,7 @@ from typing_extensions import List, Any, Optional
 import operator
 
 import sqlalchemy.inspection
-from sqlalchemy import and_, or_, select, Select, func, literal, case, not_ as sa_not
+from sqlalchemy import and_, or_, select, Select, func, literal, case, not_ as sa_not, exists as sa_exists
 from sqlalchemy.orm import Session
 
 from krrood.entity_query_language.query.query import (
@@ -17,6 +17,7 @@ from krrood.entity_query_language.query.query import (
 from krrood.entity_query_language.query.operations import Where, OrderedBy
 from krrood.entity_query_language.query.quantifiers import ResultQuantifier, An, The
 from krrood.entity_query_language.operators.core_logical_operators import AND, OR, Not
+from krrood.entity_query_language.operators.logical_quantifiers import Exists as EQLExists
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.variable import Variable, Literal
 from krrood.entity_query_language.core.mapped_variable import Attribute
@@ -397,14 +398,51 @@ class EQLTranslator:
 
     def _translate_entity(self) -> None:
         """Translate the EQL query to SQL."""
-        dao_class = get_dao_class(self.select_like.selected_variable._type_)
-        if dao_class is None:
-            raise NoDAOFoundError(
-                f"No DAO class found for {self.select_like.selected_variable._type_}"
+        selected = self.select_like.selected_variable
+        if isinstance(selected, Attribute):
+            self._translate_entity_from_attribute(selected)
+        else:
+            dao_class = get_dao_class(selected._type_)
+            if dao_class is None:
+                raise NoDAOFoundError(
+                    f"No DAO class found for {selected._type_}"
+                )
+            self.sql_query = select(dao_class)
+        self._apply_clauses()
+
+    def _translate_entity_from_attribute(self, attribute: Attribute) -> None:
+        """
+        Translate ``entity(n.attr)`` when the selected variable is an attribute access.
+
+        Resolves the owner DAO and the relationship target DAO, then builds a SELECT
+        from the target joined back to the owner so that WHERE clauses referencing
+        owner columns remain valid.
+
+        :param attribute: The outermost :class:`Attribute` node used as selected variable.
+        """
+        resolver = AttributeChainResolver()
+        rel_resolver = RelationshipResolver()
+
+        owner_dao = resolver.extract_base_dao(attribute)
+        if owner_dao is None:
+            raise NoDAOFoundError("No DAO class found for attribute chain root.")
+
+        attr_name = attribute._attribute_name_
+        mapper = sqlalchemy.inspection.inspect(owner_dao)
+        relationship = rel_resolver._find_relationship(mapper, attr_name)
+        if relationship is None:
+            raise AttributeResolutionError(
+                f"No relationship '{attr_name}' found on {owner_dao.__name__}."
             )
 
-        self.sql_query = select(dao_class)
-        self._apply_clauses()
+        target_dao = relationship.entity.class_
+        local_col = next(iter(relationship.local_columns))
+        fk_attr = getattr(owner_dao, local_col.key)
+
+        self.sql_query = select(target_dao).join(
+            owner_dao, fk_attr == target_dao.database_id
+        )
+        self.join_manager.add_table_join(owner_dao)
 
     def _translate_set_of(self) -> None:
         """
@@ -453,6 +491,8 @@ class EQLTranslator:
                     break
 
             if base_dao is None:
+                base_dao = self._extract_dao_from_where_clause()
+            if base_dao is None:
                 raise NoDAOFoundError("No DAO class found for selected expressions")
 
             self.sql_query = select(base_dao)
@@ -474,6 +514,45 @@ class EQLTranslator:
         if isinstance(expression, Aggregator):
             if hasattr(expression, "_child_"):
                 return self._extract_dao_from_expression(expression._child_)
+        return None
+
+    def _extract_dao_from_where_clause(self) -> Optional[type]:
+        """
+        Extract a base DAO class by scanning the WHERE clause for variable types.
+
+        Used as a fallback when the selected expressions (e.g. ``count_all()``)
+        carry no DAO information of their own.
+
+        :return: The first DAO class found in the WHERE clause, or None.
+        """
+        if self.eql_query._where_expression_ is None:
+            return None
+        return self._find_dao_in_expression(self.eql_query._where_expression_)
+
+    def _find_dao_in_expression(self, expression: Any) -> Optional[type]:
+        """
+        Recursively walk an EQL expression tree to find the first DAO-bearing variable.
+
+        :param expression: The EQL expression node to search.
+        :return: The first DAO class found, or None.
+        """
+        if isinstance(expression, Attribute):
+            return AttributeChainResolver().extract_base_dao(expression)
+        if isinstance(expression, Variable) and not isinstance(expression, Literal):
+            dao = get_dao_class(expression._type_)
+            if dao is not None:
+                return dao
+        for child_attr in ("_child_", "left", "right", "condition", "then_value", "else_value"):
+            child = getattr(expression, child_attr, None)
+            if child is not None:
+                result = self._find_dao_in_expression(child)
+                if result is not None:
+                    return result
+        if hasattr(expression, "_children_"):
+            for child in expression._children_:
+                result = self._find_dao_in_expression(child)
+                if result is not None:
+                    return result
         return None
 
     def _apply_clauses(self) -> None:
@@ -592,6 +671,8 @@ class EQLTranslator:
             case Not():
                 inner = self.translate_query(query._child_)
                 return sa_not(inner)
+            case EQLExists():
+                return self._translate_exists(query)
             case Comparator():
                 return self.translate_comparator(query)
             case Attribute():
@@ -845,7 +926,7 @@ class EQLTranslator:
 
         if isinstance(operand, Count):
             col = self.translate_query(operand._child_)
-            return func.count(col)
+            return func.count() if col is None else func.count(col)
 
         if isinstance(operand, Max):
             col = self.translate_query(operand._child_)
@@ -1052,6 +1133,74 @@ class EQLTranslator:
         self.join_manager.add_table_join(target_dao)
 
         return aliased_target
+
+    def _translate_exists(self, exists_node: EQLExists) -> Any:
+        """
+        Translate an EQL :class:`~krrood.entity_query_language.operators.logical_quantifiers.Exists`
+        node into a SQLAlchemy correlated EXISTS subquery.
+
+        The existential variable's type must map to a DAO class. Conditions in
+        the EXISTS body are translated without touching the outer query's JOINs
+        so that outer-variable references become correlated column references.
+
+        :param exists_node: The EQL Exists node (variable + condition).
+        :return: A SQLAlchemy EXISTS expression.
+        :raises NoDAOFoundError: When the existential variable type has no DAO.
+        """
+        existential_variable = exists_node.variable
+        condition = exists_node.condition
+        dao_class = get_dao_class(existential_variable._type_)
+        if dao_class is None:
+            raise NoDAOFoundError(
+                f"Existential variable type {existential_variable._type_} has no DAO."
+            )
+        sub_where = self._translate_exists_condition(condition)
+        sub_query = select(literal(1)).select_from(dao_class)
+        if sub_where is not None:
+            sub_query = sub_query.where(sub_where)
+        return sa_exists(sub_query)
+
+    def _translate_exists_condition(self, condition: Any) -> Optional[Any]:
+        """
+        Translate a condition expression for use inside an EXISTS subquery.
+
+        Unlike :meth:`translate_query`, this method does not mutate the outer
+        query's JOIN state. Attribute-to-variable comparisons produce direct
+        column comparisons (FK == PK) so that the outer variable acts as a
+        correlated reference rather than triggering a JOIN.
+
+        :param condition: The EQL condition expression.
+        :return: SQLAlchemy predicate or None.
+        """
+        if isinstance(condition, Comparator):
+            left = self._translate_comparator_operand(condition.left)
+            right = self._translate_comparator_operand(condition.right)
+            return OperatorMapper().map_comparison_operator(condition.operation, left, right)
+        if isinstance(condition, AND):
+            children = self._extract_logical_children(condition)
+            parts = [self._translate_exists_condition(child) for child in children]
+            return self._combine_logical_parts([part for part in parts if part is not None], and_)
+        if isinstance(condition, OR):
+            children = self._extract_logical_children(condition)
+            parts = [self._translate_exists_condition(child) for child in children]
+            return self._combine_logical_parts([part for part in parts if part is not None], or_)
+        if isinstance(condition, Not):
+            inner = self._translate_exists_condition(condition._child_)
+            return sa_not(inner) if inner is not None else None
+        return None
+
+    def _extract_logical_children(self, node: Any) -> List[Any]:
+        """
+        Extract child conditions from an AND/OR node.
+
+        :param node: AND or OR node.
+        :return: List of child expressions.
+        """
+        if hasattr(node, "left") and hasattr(node, "right"):
+            return [node.left, node.right]
+        if hasattr(node, "_children_"):
+            return list(node._children_)
+        return []
 
 
 def eql_to_sql(query: Query, session: Session,

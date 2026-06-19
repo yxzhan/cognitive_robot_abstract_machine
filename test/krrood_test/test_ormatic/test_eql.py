@@ -47,6 +47,7 @@ from krrood.entity_query_language.factories import (
     average,
     set_of,
     case_when,
+    exists,
 )
 from krrood.ormatic.data_access_objects.helper import to_dao
 from krrood.ormatic.eql_interface import eql_to_sql
@@ -1291,3 +1292,102 @@ def test_case_when_with_max(session):
     )
 
     assert str(translator.sql_query) == str(expected)
+
+
+def test_entity_with_relationship_selected_variable(session, database):
+    """
+    Prove bug: entity(m.grasp_config).where(m.robot_x > 0.5) produces a cross-join
+    instead of an INNER JOIN, returning too many results.
+
+    After the fix, GraspConfigDAO must be joined with MoveActionDAO via the FK so
+    only the grasp_config linked to a high-robot_x move is returned.
+    """
+    grasp_matching = GraspConfigDAO(rotate_gripper=0.3, approach_direction=0.0, manipulation_offset=0.0)
+    grasp_not_matching = GraspConfigDAO(rotate_gripper=0.9, approach_direction=0.0, manipulation_offset=0.0)
+    session.add(grasp_matching)
+    session.add(grasp_not_matching)
+
+    move_high = MoveActionDAO(robot_x=1.0, robot_y=0.0, hip_rotation=0.0)
+    move_high.grasp_config = grasp_matching
+    session.add(move_high)
+
+    move_low = MoveActionDAO(robot_x=0.1, robot_y=0.0, hip_rotation=0.0)
+    move_low.grasp_config = grasp_not_matching
+    session.add(move_low)
+
+    session.commit()
+
+    m = variable(MoveAction, domain=[])
+    query = an(entity(m.grasp_config).where(m.robot_x > 0.5))
+
+    translator = eql_to_sql(query, session)
+    results = translator.evaluate()
+
+    assert len(results) == 1
+    assert isinstance(results[0], GraspConfigDAO)
+    assert results[0].rotate_gripper == pytest.approx(0.3)
+
+
+def test_count_all_derives_dao_from_where_clause(session, database):
+    """
+    Prove bug: set_of(count_all()).where(m.robot_x > 0.5) raises NoDAOFoundError
+    because CountAll carries no DAO information.
+
+    After the fix, the translator must fall back to the WHERE clause to find the
+    base DAO (MoveActionDAO via m.robot_x) and emit SELECT count(*) FROM MoveActionDAO.
+    """
+    session.add(MoveActionDAO(robot_x=1.0, robot_y=0.0, hip_rotation=0.0))
+    session.add(MoveActionDAO(robot_x=2.0, robot_y=0.0, hip_rotation=0.0))
+    session.add(MoveActionDAO(robot_x=0.1, robot_y=0.0, hip_rotation=0.0))
+    session.commit()
+
+    m = variable(MoveAction, domain=[])
+    c = count_all()
+    query = an(set_of(c).where(m.robot_x > 0.5))
+
+    translator = eql_to_sql(query, session)
+    results = translator.evaluate()
+
+    assert len(results) == 1
+    assert results[0][c] == 2
+
+
+def test_exists_in_where_clause(session, database):
+    """
+    Prove bug: exists(g, m.grasp_config == g) in a WHERE clause raises
+    UnsupportedQueryTypeError because Exists is not handled in translate_query.
+
+    After the fix, the translator must emit a correlated EXISTS subquery:
+
+    SELECT MoveActionDAO.*
+    FROM MoveActionDAO
+    WHERE EXISTS (
+        SELECT 1 FROM GraspConfigDAO
+        WHERE MoveActionDAO.grasp_config_id = GraspConfigDAO.database_id
+    )
+
+    so only MoveActions that have an associated GraspConfig are returned.
+    """
+    grasp_a = GraspConfigDAO(rotate_gripper=0.1, approach_direction=0.0, manipulation_offset=0.0)
+    grasp_b = GraspConfigDAO(rotate_gripper=0.5, approach_direction=0.0, manipulation_offset=0.0)
+    session.add_all([grasp_a, grasp_b])
+
+    move_with_grasp_a = MoveActionDAO(robot_x=1.0, robot_y=0.0, hip_rotation=0.0)
+    move_with_grasp_a.grasp_config = grasp_a
+    move_with_grasp_b = MoveActionDAO(robot_x=2.0, robot_y=0.0, hip_rotation=0.0)
+    move_with_grasp_b.grasp_config = grasp_b
+    move_without_grasp = MoveActionDAO(robot_x=3.0, robot_y=0.0, hip_rotation=0.0)
+
+    session.add_all([move_with_grasp_a, move_with_grasp_b, move_without_grasp])
+    session.commit()
+
+    m = variable(MoveAction, domain=[])
+    g = variable(GraspConfig, domain=[])
+    query = an(entity(m).where(exists(g, m.grasp_config == g)))
+
+    translator = eql_to_sql(query, session)
+    results = translator.evaluate()
+
+    assert len(results) == 2
+    result_robot_xs = {r.robot_x for r in results}
+    assert result_robot_xs == {1.0, 2.0}
