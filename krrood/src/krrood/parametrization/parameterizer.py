@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum, EnumType
+from enum import EnumType
 from functools import cached_property
 from types import UnionType, EllipsisType
 from typing import Dict, Optional, Tuple, List, Iterable, Union
@@ -12,20 +12,20 @@ from krrood.parametrization.exceptions import EmptyVariableDomain, InvalidEllips
 import random_events.variable
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.variable import Literal, Variable
-from krrood.entity_query_language.factories import and_, variable
+from krrood.entity_query_language.factories import and_
 from krrood.entity_query_language.core.mapped_variable import (
     Attribute,
 )
 from krrood.entity_query_language.query.match import MatchVariable, AttributeMatch
-from krrood.ormatic.data_access_objects.helper import to_dao, get_dao_class
+from krrood.ormatic.data_access_objects.helper import to_dao
 from krrood.ormatic.data_access_objects.to_dao import ToDataAccessObjectState
 from krrood.parametrization.random_events_translator import (
     WhereExpressionToRandomEventTranslator,
 )
-from krrood.parametrization.feature_extractor import FeatureExtractor
+from krrood.parametrization.feature_extraction.feature_extractor import FeatureExtractor
 from random_events.interval import singleton
 from random_events.product_algebra import Event, SimpleEvent
-from random_events.set import Set, SetElement
+from random_events.set import Set
 from random_events.variable import (
     compatible_types,
     variable_from_name_and_type,
@@ -167,7 +167,79 @@ class UnderspecifiedParameters:
         elif isinstance(value, EllipsisType):
             return {name: variable_from_name_and_type(name=name, type_=type_)}
 
+        if isinstance(value, (list, tuple)):
+            return self._extract_variables_from_iterable_literal(name, value)
+
+        if isinstance(value, compatible_types) or isinstance(type_, compatible_types):
+            effective_type = (
+                type_
+                if (
+                    type_ is not None
+                    and isinstance(type_, type)
+                    and issubclass(type_, compatible_types)
+                )
+                else type(value)
+            )
+            result = {
+                name: variable_from_name_and_type(name=name, type_=effective_type)
+            }
+            self.conditioning_assignments_from_literal_values[result[name]] = value
+            return result
+
         return self._extract_variables_from_non_primitive_literal(attribute_match)
+
+    def _extract_variables_from_iterable_literal(
+        self, name: str, value: Union[list, tuple]
+    ) -> Dict[str, random_events.variable.Variable]:
+        """
+        Extract variables from an iterable literal by processing each element with an
+        indexed name prefix (e.g. ``walls[0].height``, ``walls[1].start_point.x``).
+
+        Primitive elements become a single conditioning variable; non-primitive elements
+        are decomposed via :py:class:`~krrood.parametrization.feature_extractor.FeatureExtractor`.
+
+        :param name: Base variable name derived from the attribute access path.
+        :param value: The iterable assigned value.
+        :return: A dictionary of extracted variables.
+        """
+        result = {}
+        for index, element in enumerate(value):
+            if element is None:
+                continue
+
+            type_ = self._process_attribute_match_type(type(element))
+            if isinstance(element, EllipsisType) and not issubclass(
+                type_, compatible_types
+            ):
+                raise InvalidEllipsis(type_)
+
+            indexed_name = f"{name}[{index}]"
+            if isinstance(element, compatible_types):
+                random_events_variable = variable_from_name_and_type(
+                    name=indexed_name, type_=type(element)
+                )
+                result[indexed_name] = random_events_variable
+                self.conditioning_assignments_from_literal_values[
+                    random_events_variable
+                ] = element
+            else:
+                dao_state = ToDataAccessObjectState()
+                extractor = FeatureExtractor.from_instances(
+                    [to_dao(element, dao_state)]
+                )
+                for feature in extractor.features:
+                    feature_name = f"{indexed_name}.{feature.get_clean_name_from_mapped_variable()}"
+                    random_events_variable = random_events.variable.Continuous(
+                        name=feature_name
+                    )
+                    result[feature_name] = random_events_variable
+                    mapping = feature.apply_mapping_on_external_root(element)
+                    if not isinstance(mapping, feature._type_):
+                        mapping = feature._type_(mapping)
+                    self.conditioning_assignments_from_literal_values[
+                        random_events_variable
+                    ] = mapping
+        return result
 
     def _extract_variables_from_non_primitive_literal(
         self, attribute_match: AttributeMatch
@@ -389,7 +461,8 @@ class UnderspecifiedParameters:
             mapping
         )
 
-    def _process_attribute_match_type(self, type_):
+    @staticmethod
+    def _process_attribute_match_type(type_):
         """
         Process the type of an attribute matches assigned variable such that there are no unions.
         :param type_: The type to process

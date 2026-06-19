@@ -5,18 +5,36 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto, StrEnum
+from functools import cached_property
 from pathlib import Path
 from types import FunctionType
 from typing import Set, Generic
 
 from sqlalchemy import types, TypeDecorator
-from typing_extensions import Dict, Any, Sequence, Self
+from typing_extensions import Dict, Any, Sequence, Self, Annotated
 from typing_extensions import List, Optional, Type
 
 from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, from_json
+from krrood.entity_query_language.core.base_expressions import SymbolicExpression
+from krrood.entity_query_language.core.mapped_variable import MappedVariable
+from krrood.entity_query_language.factories import (
+    set_of,
+    a,
+    variable,
+    count,
+    the,
+    entity,
+    count_range,
+)
+from krrood.entity_query_language.predicate import symbolic_function
 from krrood.ormatic.data_access_objects.alternative_mappings import (
     AlternativeMapping,
     T,
+)
+from krrood.parametrization.feature_extraction.aggregations import (
+    aggregation_for,
+    AggregationStatistic,
+    HasExchangeablePartAggregations,
 )
 from krrood.symbol_graph.symbol_graph import Symbol
 from ..dataset.semantic_world_like_classes import Body
@@ -138,7 +156,7 @@ class KRROODBowl(KRROODPhysicalObject):
 @dataclass(unsafe_hash=True)
 class NestedAction:
     obj: Body
-    pose: KRROODPose
+    pose: Optional[KRROODPose]
 
 
 @dataclass
@@ -722,3 +740,88 @@ class GenericClassAssociation:
 @dataclass
 class PathAssociation:
     path: Path
+
+
+class SceneObjectType(Enum):
+    TABLE = "table"
+    CHAIR = "chair"
+
+
+@dataclass
+class SceneObject:
+    type: SceneObjectType
+
+
+@dataclass
+class SceneRoom(HasExchangeablePartAggregations):
+    position: KRROODPosition
+    orientation: KRROODOrientation
+    objects: List[SceneObject]
+    type_in_need_of_preprocessing: bool = False
+
+
+@dataclass
+class TestExParts(HasExchangeablePartAggregations):
+    objects: List[SceneObject]
+    rooms: List[SceneRoom]
+
+
+@aggregation_for((SceneRoom, "objects"), (TestExParts, "objects"))
+@dataclass
+class SceneObjectAggregations(AggregationStatistic):
+    objects_to_aggregate_on: List[SceneObject]
+
+    @cached_property
+    def _eql_variable(self):
+        return variable(SceneObject, self.objects_to_aggregate_on)
+
+    def table_count(self) -> int:
+        type_var = self._eql_variable.type
+        [cou] = (
+            entity(count_range(type_var))
+            .where(type_var == SceneObjectType.TABLE)
+            .tolist()
+        )
+        return cou
+
+    def chair_count(self) -> int:
+        type_var = self._eql_variable.type
+        [cou] = (
+            entity(count_range(type_var))
+            .where(type_var == SceneObjectType.CHAIR)
+            .tolist()
+        )
+        return cou
+
+    def total_count(self) -> int:
+        [cou] = count(self._eql_variable).tolist()
+        return cou
+
+
+@aggregation_for((TestExParts, "rooms"))
+@dataclass
+class RoomAggregations(AggregationStatistic):
+    objects_to_aggregate_on: List[SceneRoom]
+
+    @cached_property
+    def _eql_variable(self):
+        return variable(SceneRoom, self.objects_to_aggregate_on)
+
+    def room_count(self) -> int:
+        [cou] = count(self._eql_variable).tolist()
+        return cou
+
+
+@dataclass
+class ExampleInt:
+    attribute: int
+
+
+@dataclass
+class ExampleString:
+    attribute: str
+
+
+@dataclass
+class MissingBaseClass:
+    objects: List[ExampleInt] = field(default_factory=list)
