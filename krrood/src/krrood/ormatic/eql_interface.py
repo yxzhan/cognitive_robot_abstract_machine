@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing_extensions import List, Any, Optional
+from typing_extensions import Callable, List, Any, Optional
 import operator
 
 import sqlalchemy.inspection
-from sqlalchemy import and_, or_, select, Select, func, literal, case, not_ as sa_not, exists as sa_exists
+from sqlalchemy import (
+    and_,
+    or_,
+    select,
+    Select,
+    func,
+    literal,
+    case,
+    not_ as sa_not,
+    exists as sqlalchemy_exists,
+)
 from sqlalchemy.orm import Session
 
 from krrood.entity_query_language.query.query import (
@@ -17,41 +27,196 @@ from krrood.entity_query_language.query.query import (
 from krrood.entity_query_language.query.operations import Where, OrderedBy
 from krrood.entity_query_language.query.quantifiers import ResultQuantifier, An, The
 from krrood.entity_query_language.operators.core_logical_operators import AND, OR, Not
-from krrood.entity_query_language.operators.logical_quantifiers import Exists as EQLExists
+from krrood.entity_query_language.operators.logical_quantifiers import (
+    Exists as EQLExists,
+)
 from krrood.entity_query_language.core.base_expressions import SymbolicExpression
 from krrood.entity_query_language.core.variable import Variable, Literal
 from krrood.entity_query_language.core.mapped_variable import Attribute
 from krrood.entity_query_language.operators.comparator import Comparator
-from krrood.entity_query_language.operators.aggregators import Aggregator, CountAll, Count, Max, Min, Sum, Average
+from krrood.entity_query_language.operators.aggregators import (
+    Aggregator,
+    CountAll,
+    Count,
+    Max,
+    Min,
+    Sum,
+    Average,
+)
 
 from krrood.entity_query_language.operators.conditionals import CaseWhen
+from krrood.exceptions import DataclassException
 from krrood.ormatic.data_access_objects.helper import get_dao_class
-from krrood.ormatic.exceptions import NoDAOFoundError
+from krrood.ormatic.exceptions import (
+    NoDAOFoundForTypeError,
+    NoDAOFoundForSelectionError,
+)
 
 
-class EQLTranslationError(Exception):
-    """Raised when an EQL expression cannot be translated into SQLAlchemy."""
+@dataclass
+class EQLTranslationError(DataclassException):
+    """Base class for errors raised when an EQL expression cannot be translated into SQLAlchemy."""
+
+    def suggest_correction(self) -> str:
+        return ""
 
 
-class UnsupportedQueryTypeError(EQLTranslationError):
-    """Raised when an unsupported query type is encountered."""
+@dataclass
+class UnsupportedQueryTypeError(EQLTranslationError, TypeError):
+    """Raised when an EQL expression node has no SQLAlchemy translation."""
+
+    query: SymbolicExpression
+    """The EQL expression node whose type is not supported."""
+
+    def error_message(self) -> str:
+        return f"Unsupported query type: {type(self.query)}"
+
+    def suggest_correction(self) -> str:
+        return (
+            "Express the query using supported constructs: entity() or set_of() combined "
+            "with where(), and(), or(), not(), exists(), comparators or aggregators."
+        )
 
 
-class UnsupportedOperatorError(EQLTranslationError):
-    """Raised when an unsupported operator is encountered."""
+@dataclass
+class UnsupportedOperatorError(EQLTranslationError, TypeError):
+    """Raised when an EQL operator has no SQLAlchemy translation."""
+
+    operation: Callable[[Any, Any], bool]
+    """The operator callable that could not be mapped to a SQLAlchemy expression."""
+
+    def error_message(self) -> str:
+        return f"Unsupported operator: {self.operation}"
+
+    def suggest_correction(self) -> str:
+        return (
+            "Use one of the supported operators: ==, !=, >, <, >=, <=, contains or in_."
+        )
 
 
-class UnsupportedQuantifierError(EQLTranslationError):
-    """Raised when an unsupported quantifier is encountered."""
+@dataclass
+class UnsupportedQuantifierError(EQLTranslationError, TypeError):
+    """Raised when an EQL result quantifier cannot be evaluated."""
+
+    quantifier: ResultQuantifier
+    """The quantifier expression that has no evaluation strategy."""
+
+    def error_message(self) -> str:
+        return f"Unsupported quantifier: {type(self.quantifier)}"
+
+    def suggest_correction(self) -> str:
+        return "Wrap the query in a supported quantifier: an() or the()."
 
 
-class AttributeResolutionError(EQLTranslationError):
-    """Raised when an attribute cannot be resolved."""
+@dataclass
+class AttributeResolutionError(EQLTranslationError, ValueError):
+    """Base class for errors raised when an EQL attribute chain cannot be resolved to a column."""
 
 
+@dataclass
+class AttributeChainRootHasNoTypeError(AttributeResolutionError):
+    """Raised when the root of an attribute chain carries no python type to resolve a DAO from."""
 
-class DomainExtractionError(EQLTranslationError):
-    """Raised when a value cannot be extracted from a domain."""
+    attribute: Attribute
+    """The attribute chain whose root variable has no associated class."""
+
+    def error_message(self) -> str:
+        return (
+            f"Attribute chain {self.attribute} has a root that does not carry a class."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Create the root variable with an explicit type, e.g. variable(type_=YourClass)."
+
+
+@dataclass
+class DAOAttributeResolutionError(AttributeResolutionError):
+    """Base class for attribute resolution errors that reference a specific DAO attribute."""
+
+    dao_class: type
+    """The DAO class involved in the failed resolution."""
+
+    attribute_name: str
+    """The attribute name that could not be resolved on the DAO class."""
+
+    def mapped_column_names(self) -> List[str]:
+        """
+        :return: The names of all columns mapped on the DAO class.
+        """
+        return sorted(sqlalchemy.inspection.inspect(self.dao_class).columns.keys())
+
+    def mapped_relationship_names(self) -> List[str]:
+        """
+        :return: The names of all relationships mapped on the DAO class.
+        """
+        return sorted(
+            sqlalchemy.inspection.inspect(self.dao_class).relationships.keys()
+        )
+
+
+@dataclass
+class MissingRelationshipError(DAOAttributeResolutionError):
+    """Raised when an attribute chain hop expects a relationship the DAO does not define."""
+
+    def error_message(self) -> str:
+        return f"No relationship '{self.attribute_name}' found on {self.dao_class.__name__}."
+
+    def suggest_correction(self) -> str:
+        relationships = self.mapped_relationship_names()
+        if not relationships:
+            return f"{self.dao_class.__name__} maps no relationships to traverse."
+        return f"Traverse one of the relationships on {self.dao_class.__name__}: {', '.join(relationships)}."
+
+
+@dataclass
+class NonRelationshipInChainError(DAOAttributeResolutionError):
+    """Raised when a non-final attribute in a chain is a plain column rather than a relationship."""
+
+    def error_message(self) -> str:
+        return (
+            f"Attribute '{self.attribute_name}' on {self.dao_class.__name__} is not a "
+            f"relationship but the attribute chain continues."
+        )
+
+    def suggest_correction(self) -> str:
+        relationships = self.mapped_relationship_names()
+        if not relationships:
+            return (
+                f"End the chain at '{self.attribute_name}'; {self.dao_class.__name__} "
+                f"maps no relationships to traverse further."
+            )
+        return (
+            f"End the chain at '{self.attribute_name}', or continue through one of the "
+            f"relationships on {self.dao_class.__name__}: {', '.join(relationships)}."
+        )
+
+
+@dataclass
+class MissingColumnError(DAOAttributeResolutionError):
+    """Raised when the leaf of an attribute chain is not a column on the DAO."""
+
+    def error_message(self) -> str:
+        return f"Column '{self.attribute_name}' not found on {self.dao_class.__name__}."
+
+    def suggest_correction(self) -> str:
+        return f"Use one of the columns on {self.dao_class.__name__}: {', '.join(self.mapped_column_names())}."
+
+
+@dataclass
+class EmptyAttributeChainError(AttributeResolutionError):
+    """Raised when an attribute chain yields no attribute names to walk."""
+
+    dao_class: type
+    """The DAO class the empty chain started from."""
+
+    attribute_names: List[str]
+    """The (empty) list of attribute names collected from the chain."""
+
+    def error_message(self) -> str:
+        return (
+            f"Attribute chain on {self.dao_class.__name__} produced no resolvable "
+            f"attributes (names: {self.attribute_names})."
+        )
 
 
 @dataclass
@@ -190,7 +355,7 @@ class OperatorMapper:
         if operation is operator.ne or operator_name == "ne":
             return left != right
 
-        raise UnsupportedOperatorError(f"Unknown operator: {operation}")
+        raise UnsupportedOperatorError(operation)
 
     def map_contains_operator(self, operation: Any, left: Any, right: Any) -> Any:
         """
@@ -386,15 +551,26 @@ class EQLTranslator:
         """Get the root condition from the query."""
         return self.eql_query._conditions_root_
 
+    @staticmethod
+    def _require_dao_class(domain_type: type) -> type:
+        """
+        Resolve the DAO class for a domain type, raising when none exists.
+
+        :param domain_type: The domain type whose DAO is required.
+        :raises NoDAOFoundForTypeError: When the type has no associated DAO.
+        """
+        dao_class = get_dao_class(domain_type)
+        if dao_class is None:
+            raise NoDAOFoundForTypeError(domain_type)
+        return dao_class
+
     def translate(self) -> None:
         if isinstance(self.eql_query, Entity):
             self._translate_entity()
         elif isinstance(self.eql_query, SetOf):
             self._translate_set_of()
         else:
-            raise UnsupportedQueryTypeError(
-                f"Unsupported query type: {type(self.eql_query)}"
-            )
+            raise UnsupportedQueryTypeError(self.eql_query)
 
     def _translate_entity(self) -> None:
         """Translate the EQL query to SQL."""
@@ -402,12 +578,7 @@ class EQLTranslator:
         if isinstance(selected, Attribute):
             self._translate_entity_from_attribute(selected)
         else:
-            dao_class = get_dao_class(selected._type_)
-            if dao_class is None:
-                raise NoDAOFoundError(
-                    f"No DAO class found for {selected._type_}"
-                )
-            self.sql_query = select(dao_class)
+            self.sql_query = select(self._require_dao_class(selected._type_))
         self._apply_clauses()
 
     def _translate_entity_from_attribute(self, attribute: Attribute) -> None:
@@ -419,14 +590,12 @@ class EQLTranslator:
         subsequent WHERE clause translations that traverse the same chain.
 
         :param attribute: The outermost :class:`Attribute` node used as selected variable.
-        :raises NoDAOFoundError: When the root variable type has no DAO.
-        :raises AttributeResolutionError: When any hop in the chain is not a relationship.
+        :raises NoDAOFoundForTypeError: When the root variable type has no DAO.
+        :raises MissingRelationshipError: When any hop in the chain is not a relationship.
         """
         attribute_names = self._collect_attribute_chain(attribute)
         base_class = self._extract_base_class(attribute)
-        current_dao = get_dao_class(base_class)
-        if current_dao is None:
-            raise NoDAOFoundError("No DAO class found for attribute chain root.")
+        current_dao = self._require_dao_class(base_class)
 
         rel_resolver = RelationshipResolver()
         self.sql_query = select(current_dao)
@@ -435,9 +604,7 @@ class EQLTranslator:
             mapper = sqlalchemy.inspection.inspect(current_dao)
             relationship = rel_resolver._find_relationship(mapper, attr_name)
             if relationship is None:
-                raise AttributeResolutionError(
-                    f"No relationship '{attr_name}' found on {current_dao.__name__}."
-                )
+                raise MissingRelationshipError(current_dao, attr_name)
             alias = self._apply_relationship_join(current_dao, attr_name, relationship)
             current_dao = alias or relationship.entity.class_
 
@@ -468,19 +635,12 @@ class EQLTranslator:
         """
         selected = self.select_like._selected_variables_
 
-        all_variables = all(isinstance(v, Variable) and not isinstance(v, Attribute)
-                            for v in selected)
+        all_variables = all(
+            isinstance(v, Variable) and not isinstance(v, Attribute) for v in selected
+        )
 
         if all_variables:
-            dao_classes = []
-            for var in selected:
-                dao_class = get_dao_class(var._type_)
-                if dao_class is None:
-                    raise NoDAOFoundError(
-                        f"No DAO class found for {var._type_}"
-                    )
-                dao_classes.append(dao_class)
-
+            dao_classes = [self._require_dao_class(var._type_) for var in selected]
             self.sql_query = select(*dao_classes)
         else:
             base_dao = None
@@ -492,7 +652,7 @@ class EQLTranslator:
             if base_dao is None:
                 base_dao = self._extract_dao_from_where_clause()
             if base_dao is None:
-                raise NoDAOFoundError("No DAO class found for selected expressions")
+                raise NoDAOFoundForSelectionError(selected)
 
             self.sql_query = select(base_dao)
             columns = [self._translate_comparator_operand(var) for var in selected]
@@ -541,7 +701,14 @@ class EQLTranslator:
             dao = get_dao_class(expression._type_)
             if dao is not None:
                 return dao
-        for child_attr in ("_child_", "left", "right", "condition", "then_value", "else_value"):
+        for child_attr in (
+            "_child_",
+            "left",
+            "right",
+            "condition",
+            "then_value",
+            "else_value",
+        ):
             child = getattr(expression, child_attr, None)
             if child is not None:
                 result = self._find_dao_in_expression(child)
@@ -596,13 +763,13 @@ class EQLTranslator:
 
     def evaluate(self) -> List[Any]:
         """
-    Evaluate the translated SQL query.
+        Evaluate the translated SQL query.
 
-    For entity() queries, returns a list of DAO objects.
-    For set_of() queries with multiple variables, returns a list of dicts
-    mapping each EQL variable to its corresponding DAO object.
+        For entity() queries, returns a list of DAO objects.
+        For set_of() queries with multiple variables, returns a list of dicts
+        mapping each EQL variable to its corresponding DAO object.
 
-    :return: Query results
+        :return: Query results
         """
         if isinstance(self.select_like, SetOf):
             return self._evaluate_set_of()
@@ -615,7 +782,7 @@ class EQLTranslator:
         elif isinstance(self.quantifier, An):
             return bound_query.all()
 
-        raise UnsupportedQuantifierError(f"Unknown quantifier: {type(self.quantifier)}")
+        raise UnsupportedQuantifierError(self.quantifier)
 
     def _evaluate_set_of(self) -> List[Any]:
         """
@@ -630,8 +797,7 @@ class EQLTranslator:
         """
         selected = self.select_like._selected_variables_
         all_variables = all(
-            isinstance(v, Variable) and not isinstance(v, Attribute)
-            for v in selected
+            isinstance(v, Variable) and not isinstance(v, Attribute) for v in selected
         )
 
         rows = self.session.execute(self.sql_query).all()
@@ -648,9 +814,6 @@ class EQLTranslator:
             UnificationDict({var: value for var, value in zip(selected, row)})
             for row in rows
         ]
-
-
-
 
     def __iter__(self):
         """Iterate over evaluation results."""
@@ -687,7 +850,7 @@ class EQLTranslator:
             case Variable():
                 return None
             case _:
-                raise UnsupportedQueryTypeError(f"Unknown query type: {type(query)}")
+                raise UnsupportedQueryTypeError(query)
 
     def translate_case_when(self, query: CaseWhen) -> Any:
         """
@@ -702,7 +865,6 @@ class EQLTranslator:
             compiled_else = self._translate_comparator_operand(query.else_value)
 
         return case((compiled_condition, compiled_then), else_=compiled_else)
-
 
     def translate_and(self, query: AND) -> Optional[Any]:
         """
@@ -844,7 +1006,11 @@ class EQLTranslator:
                 return None
 
             attribute_name = attribute_side._attribute_name_
-            relationship, foreign_key = rel_resolver.resolve_relationship_and_foreign_key(attribute_dao, attribute_name)
+            relationship, foreign_key = (
+                rel_resolver.resolve_relationship_and_foreign_key(
+                    attribute_dao, attribute_name
+                )
+            )
 
             if relationship is None:
                 return None
@@ -881,8 +1047,10 @@ class EQLTranslator:
         left_rel, left_foreign_key = rel_resolver.resolve_relationship_and_foreign_key(
             left_dao, left_attribute_name
         )
-        right_rel, right_foreign_key = rel_resolver.resolve_relationship_and_foreign_key(
-            right_dao, right_attribute_name
+        right_rel, right_foreign_key = (
+            rel_resolver.resolve_relationship_and_foreign_key(
+                right_dao, right_attribute_name
+            )
         )
 
         if left_rel is None or right_rel is None:
@@ -890,18 +1058,34 @@ class EQLTranslator:
 
         if isinstance(self.select_like, Entity):
             # The DAO class of the variable being selected (the "main" table in the query)
-            selected_dao = get_dao_class(self.select_like.selected_variable._type_)
-            if selected_dao is None:
-                raise NoDAOFoundError("Selected variable has no DAO class")
+            selected_dao = self._require_dao_class(
+                self.select_like.selected_variable._type_
+            )
             if left_dao is selected_dao:
-                target_dao, target_foreign_key, source_foreign_key = right_dao, right_foreign_key, left_foreign_key
+                target_dao, target_foreign_key, source_foreign_key = (
+                    right_dao,
+                    right_foreign_key,
+                    left_foreign_key,
+                )
             else:
-                target_dao, target_foreign_key, source_foreign_key = left_dao, left_foreign_key, right_foreign_key
+                target_dao, target_foreign_key, source_foreign_key = (
+                    left_dao,
+                    left_foreign_key,
+                    right_foreign_key,
+                )
         else:
             if not self.join_manager.is_table_joined(left_dao):
-                target_dao, target_foreign_key, source_foreign_key = left_dao, left_foreign_key, right_foreign_key
+                target_dao, target_foreign_key, source_foreign_key = (
+                    left_dao,
+                    left_foreign_key,
+                    right_foreign_key,
+                )
             elif not self.join_manager.is_table_joined(right_dao):
-                target_dao, target_foreign_key, source_foreign_key = right_dao, right_foreign_key, left_foreign_key
+                target_dao, target_foreign_key, source_foreign_key = (
+                    right_dao,
+                    right_foreign_key,
+                    left_foreign_key,
+                )
             else:
                 return None
 
@@ -1013,13 +1197,9 @@ class EQLTranslator:
         base_class = self._extract_base_class(query)
 
         if base_class is None:
-            raise AttributeResolutionError(
-                "Attribute chain leaf does not have a class."
-            )
+            raise AttributeChainRootHasNoTypeError(query)
 
-        current_dao = get_dao_class(base_class)
-        if current_dao is None:
-            raise NoDAOFoundError(f"No DAO class found for {base_class}.")
+        current_dao = self._require_dao_class(base_class)
 
         return self._walk_attribute_chain(current_dao, attribute_names)
 
@@ -1081,18 +1261,14 @@ class EQLTranslator:
                 continue
 
             if index != len(names) - 1:
-                raise AttributeResolutionError(
-                    f"Attribute '{name}' on {current_dao.__name__} is not a relationship but chain continues."
-                )
+                raise NonRelationshipInChainError(current_dao, name)
 
             if not hasattr(current_dao, name):
-                raise AttributeResolutionError(
-                    f"Column '{name}' not found on {current_dao.__name__}."
-                )
+                raise MissingColumnError(current_dao, name)
 
             return getattr(current_dao, name)
 
-        raise AttributeResolutionError("Attribute chain processing error.")
+        raise EmptyAttributeChainError(current_dao, names)
 
     def _apply_relationship_join(
         self, dao_class: type, attribute_name: str, relationship: Any
@@ -1146,20 +1322,16 @@ class EQLTranslator:
 
         :param exists_node: The EQL Exists node (variable + condition).
         :return: A SQLAlchemy EXISTS expression.
-        :raises NoDAOFoundError: When the existential variable type has no DAO.
+        :raises NoDAOFoundForTypeError: When the existential variable type has no DAO.
         """
         existential_variable = exists_node.variable
         condition = exists_node.condition
-        dao_class = get_dao_class(existential_variable._type_)
-        if dao_class is None:
-            raise NoDAOFoundError(
-                f"Existential variable type {existential_variable._type_} has no DAO."
-            )
+        dao_class = self._require_dao_class(existential_variable._type_)
         sub_where = self._translate_exists_condition(condition)
         sub_query = select(literal(1)).select_from(dao_class)
         if sub_where is not None:
             sub_query = sub_query.where(sub_where)
-        return sa_exists(sub_query)
+        return sqlalchemy_exists(sub_query)
 
     def _translate_exists_condition(self, condition: Any) -> Optional[Any]:
         """
@@ -1176,15 +1348,21 @@ class EQLTranslator:
         if isinstance(condition, Comparator):
             left = self._translate_comparator_operand(condition.left)
             right = self._translate_comparator_operand(condition.right)
-            return OperatorMapper().map_comparison_operator(condition.operation, left, right)
+            return OperatorMapper().map_comparison_operator(
+                condition.operation, left, right
+            )
         if isinstance(condition, AND):
             children = self._extract_logical_children(condition)
             parts = [self._translate_exists_condition(child) for child in children]
-            return self._combine_logical_parts([part for part in parts if part is not None], and_)
+            return self._combine_logical_parts(
+                [part for part in parts if part is not None], and_
+            )
         if isinstance(condition, OR):
             children = self._extract_logical_children(condition)
             parts = [self._translate_exists_condition(child) for child in children]
-            return self._combine_logical_parts([part for part in parts if part is not None], or_)
+            return self._combine_logical_parts(
+                [part for part in parts if part is not None], or_
+            )
         if isinstance(condition, Not):
             inner = self._translate_exists_condition(condition._child_)
             return sa_not(inner) if inner is not None else None
@@ -1204,8 +1382,9 @@ class EQLTranslator:
         return []
 
 
-def eql_to_sql(query: Query, session: Session,
-               as_common_table_expression: Optional[str] = None) -> Union[EQLTranslator, Any]:
+def eql_to_sql(
+    query: Query, session: Session, as_common_table_expression: Optional[str] = None
+) -> Union[EQLTranslator, Any]:
     """
     Translate an EQL query to SQL.
 
