@@ -353,7 +353,6 @@ class DofLimitProfiler:
         lower_bound = 0
         best_vel_limit = 0
         best_jerk_limit = 0
-        i = -1
         for i in range(100):
             vel_limit = max_velocity_from_horizon_and_jerk_qp(
                 prediction_horizon=prediction_horizon,

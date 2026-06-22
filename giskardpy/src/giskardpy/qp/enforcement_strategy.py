@@ -273,7 +273,6 @@ class IntegralStrategy(ExpressionEnforcementStrategy):
         """
         Clamps a bound to the largest change reachable within the control horizon.
         """
-        # todo normalization with jacobian???
         return sm.limit(
             value,
             -normalization_number * dt * control_horizon,
