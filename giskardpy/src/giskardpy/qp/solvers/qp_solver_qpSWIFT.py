@@ -21,11 +21,12 @@ class QPSWIFTExitFlags(IntEnum):
 @dataclass
 class QPSolverQPSwift(QPSolver[QPDataExplicit]):
 
-    ignore_solver_failures: bool = False
+    big_ball_mode: bool = False
     """
     qpSWIFT does not have infeasible detection and cannot differentiate suboptimal from infeasible.
     If you know your QP is actually feasible, you can just ignore the failures and use the suboptimal solution.
-    .. warning:: This might lead to instability if the qp was actually infeasible.
+    .. warning:: This is unsafe because it might lead to instability if the QP was actually infeasible. Only enable it
+        when you are certain the problem is feasible.
     """
 
     opts = {
@@ -51,7 +52,7 @@ class QPSolverQPSwift(QPSolver[QPDataExplicit]):
             options=self.opts,
         )
         exit_flag = result.exit_flag
-        if not self.ignore_solver_failures:
+        if not self.big_ball_mode:
             if exit_flag != QPSWIFTExitFlags.Optimal:
                 error_code = QPSWIFTExitFlags(exit_flag)
                 raise SolverReturnedFailureError(solver_status=str(error_code))
