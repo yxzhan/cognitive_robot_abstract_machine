@@ -96,7 +96,7 @@ class ActionServerTask(
         Creates a goal and sends it to the action server asynchronously.
         """
         future = self._action_client.send_goal_async(self._msg)
-        future.add_done_callback(self.result_callback)
+        future.add_done_callback(self.goal_response_callback)
 
     def goal_response_callback(self, future):
         """
