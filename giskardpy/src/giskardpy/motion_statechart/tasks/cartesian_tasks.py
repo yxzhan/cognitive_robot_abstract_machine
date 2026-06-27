@@ -23,6 +23,7 @@ from giskardpy.motion_statechart.goals.templates import Parallel
 from giskardpy.motion_statechart.graph_node import (
     NodeArtifacts,
     MotionStatechartNode,
+    DebugExpression,
 )
 from giskardpy.motion_statechart.graph_node import Task
 from krrood.symbolic_math.float_variable_data import FloatVariableData
@@ -611,7 +612,10 @@ class CartesianPose(CartesianTask):
             sm.abs(rotation_error) < self.threshold,
             distance_to_goal < self.threshold,
         )
-
+        artifacts.debug_expressions.append(
+            DebugExpression("goal", self.root_T_goal_reference_frame @ self.goal_pose)
+        )
+        artifacts.debug_expressions.append(DebugExpression("current", root_P_current))
         return artifacts
 
 

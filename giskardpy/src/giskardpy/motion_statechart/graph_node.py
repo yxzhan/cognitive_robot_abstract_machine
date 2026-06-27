@@ -34,6 +34,7 @@ from semantic_digital_twin.spatial_types import (
     Quaternion,
     RotationMatrix,
     HomogeneousTransformationMatrix,
+    Pose,
 )
 from semantic_digital_twin.world_description.geometry import Color
 from giskardpy.motion_statechart.context import MotionStatechartContext
@@ -321,6 +322,7 @@ class DebugExpression:
         | Quaternion
         | RotationMatrix
         | HomogeneousTransformationMatrix
+        | Pose
     )
 
     color: Color = field(default_factory=lambda: Color(1, 0, 0, 1))

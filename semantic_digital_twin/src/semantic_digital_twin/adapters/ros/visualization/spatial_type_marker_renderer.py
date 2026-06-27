@@ -74,7 +74,7 @@ class SpatialTypeVisualization:
     lifetime_seconds: float = 0.0
     """How long the markers stay alive. ``0`` keeps them indefinitely."""
 
-    arrow_length: float = 0.5
+    arrow_length: float = 0.25
     """The length of the axis arrows used to visualize orientations."""
 
     sphere_diameter: float = 0.05
@@ -280,7 +280,7 @@ class PoseLikeMarkerRenderer(SpatialTypeMarkerRenderer[Pose]):
             RosPoint(),
             RosPoint(x=end_point[0], y=end_point[1], z=end_point[2]),
         ]
-        marker.scale = RosVector3(x=0.025, y=0.05, z=0.1)
+        marker.scale = RosVector3(x=0.025, y=0.05, z=0.05)
         marker.color = ColorRGBA(
             r=axis_color[0], g=axis_color[1], b=axis_color[2], a=axis_color[3]
         )
