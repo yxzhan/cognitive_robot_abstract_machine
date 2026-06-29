@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Type
 
 import numpy as np
 from builtin_interfaces.msg import Duration
@@ -13,13 +12,16 @@ from geometry_msgs.msg import (
     Vector3 as RosVector3,
 )
 from std_msgs.msg import ColorRGBA, Header
-from typing_extensions import ClassVar, Generic, TypeVar, get_args
+from typing_extensions import ClassVar, TypeVar
 from visualization_msgs.msg import Marker
 
-from krrood.exceptions import DataclassException
+from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from krrood.utils import recursive_subclasses
 from semantic_digital_twin.adapters.ros.semdt_to_ros2_converters import (
     ColorToRos2Converter,
+)
+from semantic_digital_twin.adapters.ros.visualization.exceptions import (
+    CannotRenderSpatialTypeError,
 )
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
@@ -34,22 +36,6 @@ from semantic_digital_twin.spatial_types.spatial_types import (
 from semantic_digital_twin.world_description.geometry import Color
 
 SpatialTypeInput = TypeVar("SpatialTypeInput", bound=SpatialType)
-
-
-@dataclass
-class CannotRenderSpatialTypeError(DataclassException):
-    """Raised when no renderer can turn a spatial type into RViz markers."""
-
-    spatial_type_type: Type = field(kw_only=True)
-    """The type of the spatial type that could not be rendered."""
-
-    def error_message(self) -> str:
-        return (
-            f"No renderer available for spatial type {self.spatial_type_type.__name__}."
-        )
-
-    def suggest_correction(self) -> str:
-        return ""
 
 
 @dataclass
@@ -82,7 +68,7 @@ class SpatialTypeVisualization:
 
 
 @dataclass
-class SpatialTypeMarkerRenderer(ABC, Generic[SpatialTypeInput]):
+class SpatialTypeMarkerRenderer(SubClassSafeGeneric[SpatialTypeInput], ABC):
     """
     Renders a single category of spatial type into one or more RViz markers.
 
@@ -93,7 +79,7 @@ class SpatialTypeMarkerRenderer(ABC, Generic[SpatialTypeInput]):
     @classmethod
     def input_type(cls) -> type[SpatialTypeInput]:
         """The spatial type category handled by this renderer."""
-        return get_args(cls.__orig_bases__[0])[0]
+        return cls.get_generic_type()
 
     @classmethod
     def can_render(cls, spatial_type: SpatialType) -> bool:

@@ -108,7 +108,13 @@ class DebugExpressionTrajectoryPlotter:
         recorded_debug_expression: RecordedDebugExpression,
         time: np.ndarray,
     ) -> None:
-        """Plot every scalar component of one debug expression onto the given axis."""
+        """
+        Plot every scalar component of one debug expression onto the given axis.
+
+        :param axis: The axis the debug expression is plotted on.
+        :param recorded_debug_expression: The recorded debug expression to plot.
+        :param time: The time values used for the x-axis.
+        """
         values = recorded_debug_expression.values
         name = recorded_debug_expression.name
         color = recorded_debug_expression.debug_expression.color

@@ -8,7 +8,9 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from visualization_msgs.msg import MarkerArray
 
-from krrood.exceptions import DataclassException
+from semantic_digital_twin.adapters.ros.visualization.exceptions import (
+    WorldNotResolvableError,
+)
 from semantic_digital_twin.adapters.ros.visualization.spatial_type_marker_renderer import (
     SpatialTypeMarkerRenderer,
     SpatialTypeVisualization,
@@ -21,23 +23,6 @@ if TYPE_CHECKING:
     from rclpy.publisher import Publisher
 
     from semantic_digital_twin.world import World
-
-
-@dataclass
-class WorldNotResolvableError(DataclassException):
-    """Raised when no world can be resolved for a spatial type that should be published."""
-
-    spatial_type: SpatialType = field(kw_only=True)
-    """The spatial type whose world could not be resolved."""
-
-    def error_message(self) -> str:
-        return (
-            "Cannot resolve a world: no world was given and the spatial type "
-            f"{self.spatial_type} has no reference frame to derive one from."
-        )
-
-    def suggest_correction(self) -> str:
-        return "Pass the world explicitly or give the spatial type a reference frame."
 
 
 @dataclass(eq=False)

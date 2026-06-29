@@ -39,6 +39,7 @@ import semantic_digital_twin.adapters.ros.semdt_to_ros2_converters
 import semantic_digital_twin.adapters.ros.tf_publisher
 import semantic_digital_twin.adapters.ros.tfwrapper
 import semantic_digital_twin.adapters.ros.visualization.collision_viz_marker
+import semantic_digital_twin.adapters.ros.visualization.exceptions
 import semantic_digital_twin.adapters.ros.visualization.pose_publisher
 import semantic_digital_twin.adapters.ros.visualization.spatial_type_marker_renderer
 import semantic_digital_twin.adapters.ros.visualization.spatial_type_publisher
@@ -4476,7 +4477,7 @@ class TFWrapperDAO(
 class CannotRenderSpatialTypeErrorDAO(
     Base,
     DataAccessObject[
-        semantic_digital_twin.adapters.ros.visualization.spatial_type_marker_renderer.CannotRenderSpatialTypeError
+        semantic_digital_twin.adapters.ros.visualization.exceptions.CannotRenderSpatialTypeError
     ],
 ):
     __tablename__ = "CannotRenderSpatialTypeErrorDAO"
@@ -4487,6 +4488,32 @@ class CannotRenderSpatialTypeErrorDAO(
 
     spatial_type_type: Mapped[TypeType] = mapped_column(
         TypeType, nullable=False, use_existing_column=True
+    )
+
+
+class WorldNotResolvableErrorDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.adapters.ros.visualization.exceptions.WorldNotResolvableError
+    ],
+):
+    __tablename__ = "WorldNotResolvableErrorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    spatial_type_id: Mapped[int] = mapped_column(
+        ForeignKey("SpatialTypeDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    spatial_type: Mapped[SpatialTypeDAO] = relationship(
+        "SpatialTypeDAO",
+        uselist=False,
+        foreign_keys=[spatial_type_id],
+        post_update=True,
     )
 
 
@@ -4615,32 +4642,6 @@ class Vector3MarkerRendererDAO(
         "inherit_condition": database_id == SpatialTypeMarkerRendererDAO.database_id,
         "polymorphic_load": "selectin",
     }
-
-
-class WorldNotResolvableErrorDAO(
-    Base,
-    DataAccessObject[
-        semantic_digital_twin.adapters.ros.visualization.spatial_type_publisher.WorldNotResolvableError
-    ],
-):
-    __tablename__ = "WorldNotResolvableErrorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    spatial_type_id: Mapped[int] = mapped_column(
-        ForeignKey("SpatialTypeDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    spatial_type: Mapped[SpatialTypeDAO] = relationship(
-        "SpatialTypeDAO",
-        uselist=False,
-        foreign_keys=[spatial_type_id],
-        post_update=True,
-    )
 
 
 class FetchWorldServerDAO(
