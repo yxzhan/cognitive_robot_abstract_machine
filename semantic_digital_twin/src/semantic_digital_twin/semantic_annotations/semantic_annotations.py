@@ -32,6 +32,7 @@ from semantic_digital_twin.semantic_annotations.mixins import (
     HasRootBody,
     IsStorageSpace,
     HasLegs,
+    HasSink,
 )
 from semantic_digital_twin.spatial_types import (
     Point3,
@@ -451,7 +452,7 @@ class Table(Furniture, HasSupportingSurface, HasLegs):
 
 
 @dataclass(eq=False)
-class CounterTop(Furniture, HasSupportingSurface):
+class CounterTop(Furniture, HasSupportingSurface, HasSink):
     """
     A semantic annotation that represents a counter top.
     """

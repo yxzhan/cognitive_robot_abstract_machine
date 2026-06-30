@@ -79,6 +79,7 @@ if TYPE_CHECKING:
         Aperture,
         MechanicalJoint,
         Leg,
+        Sink,
     )
     from semantic_digital_twin.world import World
 
@@ -524,6 +525,19 @@ class HasLegs(PartWholeRelationship, ABC):
 
 
 @dataclass(eq=False)
+class HasSink(PartWholeRelationship, ABC):
+    """
+    A mixin class for semantic annotations that have a sink.
+    """
+
+    sink: Optional[Sink] = part_whole_relationship_field(default=None)
+    """
+    The sink of the semantic annotation.
+    """
+
+
+
+@dataclass(eq=False)
 class IsStorageSpace(HasRootBody, ABC):
     """
     A mixin class for semantic annotations that represent storage spaces. Used to afterthefact add object for example
@@ -966,19 +980,4 @@ class HasCaseAsRootBody(HasSupportingSurface, ABC):
 
         return container_event
 
-
-# Backwards compatibility definitions for ORM interfaces
-@dataclass(eq=False)
-class HasHinge(HasMechanicalJoint, ABC):
-    pass
-
-
-@dataclass(eq=False)
-class HasSlider(HasMechanicalJoint, ABC):
-    pass
-
-
-@dataclass(eq=False)
-class HasStorageSpace(IsStorageSpace, ABC):
-    pass
 

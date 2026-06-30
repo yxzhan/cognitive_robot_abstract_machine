@@ -78,83 +78,126 @@ class KitchenEnvironment:
     def _build_environment_walls(self, world: World):
         """
         Builds and configures the environment walls for a given world.
-        This design constructs all walls as a single body containing multiple boxes.
         """
+        root = world.root
+
+        north_west_wall = Cylinder(width=1.53, height=3.00)
+        shape_geometry = ShapeCollection([north_west_wall])
+        north_west_wall_body = Body(
+            name=PrefixedName("north_west_wall_body"),
+            collision=shape_geometry,
+            visual=shape_geometry,
+        )
+
+        root_C_north_west_wall = FixedConnection(
+            parent=root,
+            child=north_west_wall_body,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=4.924, y=6.295, z=1.50
+            ),
+        )
+
         with world.modify_world():
-            # Create a single Wall annotation and body representing all environment walls
-            walls_annotation = Wall.create_with_new_body_in_world(
+            south_wall1 = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("environment_walls"),
-                world_root_T_self=HomogeneousTransformationMatrix(),
-                scale=Scale(0.01, 1.0, 1.0)  # dummy scale
+                name=PrefixedName("south_wall1"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(y=-2.01, z=1.50),
+                scale=Scale(x=0.05, y=1.00, z=3.00),
             )
 
-            shapes = []
+            south_wall2 = Wall.create_with_new_body_in_world(
+                world=world,
+                name=PrefixedName("south_wall2"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=-0.145, y=-1.45, z=1.50, yaw=np.pi / 2
+                ),
+                scale=Scale(x=0.05, y=0.29, z=3.00),
+            )
 
-            # 1. south_wall1
-            box1 = Box(scale=Scale(x=0.05, y=1.00, z=3.00))
-            box1.origin = HomogeneousTransformationMatrix.from_xyz_rpy(y=-2.01, z=1.50, reference_frame=walls_annotation.root)
-            shapes.append(box1)
+            south_wall3 = Wall.create_with_new_body_in_world(
+                world=world,
+                name=PrefixedName("south_wall3"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=-0.29, y=-0.9925, z=0.50
+                ),
+                scale=Scale(x=0.05, y=1.085, z=1.00),
+            )
 
-            # 2. south_wall2
-            box2 = Box(scale=Scale(x=0.05, y=0.29, z=3.00))
-            box2.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.145, y=-1.45, z=1.50, yaw=np.pi / 2, reference_frame=walls_annotation.root)
-            shapes.append(box2)
+            south_wall4 = Wall.create_with_new_body_in_world(
+                world=world,
+                name=PrefixedName("south_wall4"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=-0.145, y=-0.45, z=0.50, yaw=np.pi / 2
+                ),
+                scale=Scale(x=0.05, y=0.29, z=1.00),
+            )
 
-            # 3. south_wall3
-            box3 = Box(scale=Scale(x=0.05, y=1.085, z=1.00))
-            box3.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.29, y=-0.9925, z=0.50, reference_frame=walls_annotation.root)
-            shapes.append(box3)
+            south_wall5 = Wall.create_with_new_body_in_world(
+                world=world,
+                name=PrefixedName("south_wall5"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=-0.145, y=0.45, z=0.50, yaw=np.pi / 2
+                ),
+                scale=Scale(0.05, 0.29, 1.00),
+            )
 
-            # 4. south_wall4
-            box4 = Box(scale=Scale(x=0.05, y=0.29, z=1.00))
-            box4.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.145, y=-0.45, z=0.50, yaw=np.pi / 2, reference_frame=walls_annotation.root)
-            shapes.append(box4)
+            south_wall6 = Wall.create_with_new_body_in_world(
+                world=world,
+                name=PrefixedName("south_wall6"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=-0.29025, y=1.80, z=0.50
+                ),
+                scale=Scale(0.05, 2.75, 1.00),
+            )
 
-            # 5. south_wall5
-            box5 = Box(scale=Scale(0.05, 0.29, 1.00))
-            box5.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.145, y=0.45, z=0.50, yaw=np.pi / 2, reference_frame=walls_annotation.root)
-            shapes.append(box5)
+            south_wall7 = Wall.create_with_new_body_in_world(
+                world=world,
+                name=PrefixedName("south_wall7"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=-0.29025, y=5.16, z=0.50
+                ),
+                scale=Scale(0.05, 2.27, 1.00),
+            )
 
-            # 6. south_wall6
-            box6 = Box(scale=Scale(0.05, 2.75, 1.00))
-            box6.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.29025, y=1.80, z=0.50, reference_frame=walls_annotation.root)
-            shapes.append(box6)
+            east_wall = Wall.create_with_new_body_in_world(
+                world=world,
+                name=PrefixedName("east_wall"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=2.462, y=-2.535, z=1.50, yaw=np.pi / 2
+                ),
+                scale=Scale(0.05, 4.924, 3.00),
+            )
 
-            # 7. south_wall7
-            box7 = Box(scale=Scale(0.05, 2.27, 1.00))
-            box7.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.29025, y=5.16, z=0.50, reference_frame=walls_annotation.root)
-            shapes.append(box7)
+            middle_wall = Wall.create_with_new_body_in_world(
+                world=world,
+                name=PrefixedName("middle_wall"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=2.20975, y=5.00, z=0.50
+                ),
+                scale=Scale(0.05, 2.67, 1.00),
+            )
 
-            # 8. east_wall
-            box8 = Box(scale=Scale(0.05, 4.924, 3.00))
-            box8.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=2.462, y=-2.535, z=1.50, yaw=np.pi / 2, reference_frame=walls_annotation.root)
-            shapes.append(box8)
+            west_wall = Wall.create_with_new_body_in_world(
+                world=world,
+                name=PrefixedName("west_wall"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=1.9345, y=6.32, z=1.50, yaw=np.pi / 2
+                ),
+                scale=Scale(0.05, 4.449, 3.00),
+            )
 
-            # 9. middle_wall
-            box9 = Box(scale=Scale(0.05, 2.67, 1.00))
-            box9.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=2.20975, y=5.00, z=0.50, reference_frame=walls_annotation.root)
-            shapes.append(box9)
+            north_wall = Wall.create_with_new_body_in_world(
+                world=world,
+                name=PrefixedName("north_wall"),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=4.949, y=1.51, z=1.50
+                ),
+                scale=Scale(0.05, 8.04, 3.00),
+            )
 
-            # 10. west_wall
-            box10 = Box(scale=Scale(0.05, 4.449, 3.00))
-            box10.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=1.9345, y=6.32, z=1.50, yaw=np.pi / 2, reference_frame=walls_annotation.root)
-            shapes.append(box10)
-
-            # 11. north_wall
-            box11 = Box(scale=Scale(0.05, 8.04, 3.00))
-            box11.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=4.949, y=1.51, z=1.50, reference_frame=walls_annotation.root)
-            shapes.append(box11)
-
-            # 12. north_west_wall
-            box12 = Cylinder(width=1.53, height=3.00)
-            box12.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=4.924, y=6.295, z=1.50, reference_frame=walls_annotation.root)
-            shapes.append(box12)
-
-            geometry = ShapeCollection(shapes, reference_frame=walls_annotation.root)
-            walls_annotation.root.collision = geometry
-            walls_annotation.root.visual = geometry
+            world.add_connection(root_C_north_west_wall)
             return world
+
 
     def _build_environment_furniture(self, world: World):
         """
@@ -258,7 +301,7 @@ class KitchenEnvironment:
                 scale=Scale(x=0.4, y=0.6, z=0.005)
             )
             for shape in sink.root.visual.shapes: shape.color = Color.BLACK()
-            counter_top.add_object(sink)
+            counter_top.add(sink)
 
             module_1_width, module_2_width = 0.60, 0.55
             module_3_width = counter_top_length - module_1_width - module_2_width

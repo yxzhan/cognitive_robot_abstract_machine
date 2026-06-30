@@ -1232,35 +1232,3 @@ class MujocoEntityNotFoundError(MujocoError):
 
     def suggest_correction(self) -> str:
         return ""
-
-
-@dataclass
-class AddingAnExistingSemanticAnnotationError(UsageError):
-    """
-    Raised when a semantic annotation already exists in this world.
-    """
-
-    semantic_annotation: SemanticAnnotation
-
-    def error_message(self) -> str:
-        return (
-            f"Semantic annotation {self.semantic_annotation} already exists in this world. "
-            f"Each annotation instance can only be added once; reuse the existing one instead of adding it again."
-        )
-
-
-@dataclass
-class DuplicateKinematicStructureEntityError(UsageError):
-    """
-    Raised when multiple kinematic structure entities have the same name.
-    """
-
-    names: list[PrefixedName]
-
-    def error_message(self) -> str:
-        return (
-            f"Kinematic structure entities with names {self.names} are duplicates, "
-            f"but kinematic structure entity names must be unique within a world. "
-            f"Give entities from different sources distinct prefixes, e.g. PrefixedName(name, prefix='robot1')."
-        )
-
