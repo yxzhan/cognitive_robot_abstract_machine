@@ -147,7 +147,7 @@ class KitchenEnvironment:
             shapes.append(box11)
 
             # 12. north_west_wall
-            box12 = Box(scale=Scale(x=1.53, y=1.53, z=3.00))
+            box12 = Cylinder(width=1.53, height=3.00)
             box12.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=4.924, y=6.295, z=1.50, reference_frame=walls_annotation.root)
             shapes.append(box12)
 
