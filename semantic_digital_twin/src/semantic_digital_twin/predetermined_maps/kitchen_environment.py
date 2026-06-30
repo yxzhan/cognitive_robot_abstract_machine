@@ -77,123 +77,83 @@ class KitchenEnvironment:
 
     def _build_environment_walls(self, world: World):
         """
-        Builds and configures the environment walls for a given world. This involves creating
-        various walls with predefined dimensions, transformation matrices, and connections.
-
-        :param world: An instance representing the environment world where walls are to be
-        configured and added.
-
-        :return: The modified world instance with configured walls and connections.
+        Builds and configures the environment walls for a given world.
+        This design constructs all walls as a single body containing multiple boxes.
         """
-        root = world.root
         with world.modify_world():
-            south_wall1 = Wall.create_with_new_body_in_world(
+            # Create a single Wall annotation and body representing all environment walls
+            walls_annotation = Wall.create_with_new_body_in_world(
                 world=world,
-                name=PrefixedName("south_wall1"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    y=-2.01
-                ),
-                scale=Scale(x=0.05, y=1.00, z=3.00),
+                name=PrefixedName("environment_walls"),
+                world_root_T_self=HomogeneousTransformationMatrix(),
+                scale=Scale(0.01, 1.0, 1.0)  # dummy scale
             )
 
-            south_wall2 = Wall.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("south_wall2"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.145, y=-1.45, yaw=np.pi / 2
-                ),
-                scale=Scale(x=0.05, y=0.29, z=3.00),
-            )
+            shapes = []
 
-            south_wall3 = Wall.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("south_wall3"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.29, y=-0.9925
-                ),
-                scale=Scale(x=0.05, y=1.085, z=1.00),
-            )
+            # 1. south_wall1
+            box1 = Box(scale=Scale(x=0.05, y=1.00, z=3.00))
+            box1.origin = HomogeneousTransformationMatrix.from_xyz_rpy(y=-2.01, z=1.50, reference_frame=walls_annotation.root)
+            shapes.append(box1)
 
-            south_wall4 = Wall.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("south_wall4"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.145, y=-0.45, yaw=np.pi / 2
-                ),
-                scale=Scale(x=0.05, y=0.29, z=1.00),
-            )
+            # 2. south_wall2
+            box2 = Box(scale=Scale(x=0.05, y=0.29, z=3.00))
+            box2.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.145, y=-1.45, z=1.50, yaw=np.pi / 2, reference_frame=walls_annotation.root)
+            shapes.append(box2)
 
-            south_wall5 = Wall.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("south_wall5"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.145, y=0.45, yaw=np.pi / 2
-                ),
-                scale=Scale(0.05, 0.29, 1.00),
-            )
+            # 3. south_wall3
+            box3 = Box(scale=Scale(x=0.05, y=1.085, z=1.00))
+            box3.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.29, y=-0.9925, z=0.50, reference_frame=walls_annotation.root)
+            shapes.append(box3)
 
-            south_wall6 = Wall.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("south_wall6"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.29025, y=1.80
-                ),
-                scale=Scale(0.05, 2.75, 1.00),
-            )
+            # 4. south_wall4
+            box4 = Box(scale=Scale(x=0.05, y=0.29, z=1.00))
+            box4.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.145, y=-0.45, z=0.50, yaw=np.pi / 2, reference_frame=walls_annotation.root)
+            shapes.append(box4)
 
-            south_wall7 = Wall.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("south_wall7"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.29025, y=5.16
-                ),
-                scale=Scale(0.05, 2.27, 1.00),
-            )
+            # 5. south_wall5
+            box5 = Box(scale=Scale(0.05, 0.29, 1.00))
+            box5.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.145, y=0.45, z=0.50, yaw=np.pi / 2, reference_frame=walls_annotation.root)
+            shapes.append(box5)
 
-            east_wall = Wall.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("east_wall"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=2.462, y=-2.535, yaw=np.pi / 2
-                ),
-                scale=Scale(0.05, 4.924, 3.00),
-            )
+            # 6. south_wall6
+            box6 = Box(scale=Scale(0.05, 2.75, 1.00))
+            box6.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.29025, y=1.80, z=0.50, reference_frame=walls_annotation.root)
+            shapes.append(box6)
 
-            middle_wall = Wall.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("middle_wall"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=2.20975, y=5.00
-                ),
-                scale=Scale(0.05, 2.67, 1.00),
-            )
+            # 7. south_wall7
+            box7 = Box(scale=Scale(0.05, 2.27, 1.00))
+            box7.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.29025, y=5.16, z=0.50, reference_frame=walls_annotation.root)
+            shapes.append(box7)
 
-            west_wall = Wall.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("west_wall"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=1.9345, y=6.32, yaw=np.pi / 2
-                ),
-                scale=Scale(0.05, 4.449, 3.00),
-            )
+            # 8. east_wall
+            box8 = Box(scale=Scale(0.05, 4.924, 3.00))
+            box8.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=2.462, y=-2.535, z=1.50, yaw=np.pi / 2, reference_frame=walls_annotation.root)
+            shapes.append(box8)
 
-            north_wall = Wall.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("north_wall"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=4.949, y=1.51
-                ),
-                scale=Scale(0.05, 8.04, 3.00),
-            )
+            # 9. middle_wall
+            box9 = Box(scale=Scale(0.05, 2.67, 1.00))
+            box9.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=2.20975, y=5.00, z=0.50, reference_frame=walls_annotation.root)
+            shapes.append(box9)
 
-            WallPanel.create_with_new_body_in_world(
-                world=world,
-                name=PrefixedName("north_west_wall"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=4.924, y=6.295, z=1.50
-                ),
-                scale=Scale(x=1.53, y=1.53, z=3.00)
-            )
+            # 10. west_wall
+            box10 = Box(scale=Scale(0.05, 4.449, 3.00))
+            box10.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=1.9345, y=6.32, z=1.50, yaw=np.pi / 2, reference_frame=walls_annotation.root)
+            shapes.append(box10)
+
+            # 11. north_wall
+            box11 = Box(scale=Scale(0.05, 8.04, 3.00))
+            box11.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=4.949, y=1.51, z=1.50, reference_frame=walls_annotation.root)
+            shapes.append(box11)
+
+            # 12. north_west_wall
+            box12 = Box(scale=Scale(x=1.53, y=1.53, z=3.00))
+            box12.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=4.924, y=6.295, z=1.50, reference_frame=walls_annotation.root)
+            shapes.append(box12)
+
+            geometry = ShapeCollection(shapes, reference_frame=walls_annotation.root)
+            walls_annotation.root.collision = geometry
+            walls_annotation.root.visual = geometry
             return world
 
     def _build_environment_furniture(self, world: World):
@@ -240,7 +200,7 @@ class KitchenEnvironment:
                 scale=Scale(x=0.02, y=fridge_width, z=door_height)
             )
             for shape in fridge_door.root.visual.shapes: shape.color = Color.WHITE()
-            fridge_door.add_hinge(fridge_door_hinge)
+            fridge_door.add(fridge_door_hinge)
             refrigerator.add(fridge_door)
 
             drawer_height = (fridge_height - 0.08) * 0.25
@@ -298,7 +258,7 @@ class KitchenEnvironment:
                 scale=Scale(x=0.4, y=0.6, z=0.005)
             )
             for shape in sink.root.visual.shapes: shape.color = Color.BLACK()
-            counter_top.add(sink)
+            counter_top.add_object(sink)
 
             module_1_width, module_2_width = 0.60, 0.55
             module_3_width = counter_top_length - module_1_width - module_2_width
@@ -324,7 +284,7 @@ class KitchenEnvironment:
                 scale=Scale(x=0.02, y=module_1_width, z=counter_top_height)
             )
             for shape in module_1_door.root.visual.shapes: shape.color = Color.WHITE()
-            module_1_door.add_hinge(module_1_hinge)
+            module_1_door.add(module_1_hinge)
             module_1_cabinet.add(module_1_door)
 
             module_1_handle = Handle.create_with_new_body_in_world(
@@ -356,7 +316,7 @@ class KitchenEnvironment:
                 scale=Scale(x=0.02, y=module_2_width, z=counter_top_height)
             )
             for shape in module_2_door.root.visual.shapes: shape.color = Color.WHITE()
-            module_2_door.add_hinge(module_2_hinge)
+            module_2_door.add(module_2_hinge)
             dishwasher.add(module_2_door)
 
             module_2_handle = Handle.create_with_new_body_in_world(
@@ -374,7 +334,7 @@ class KitchenEnvironment:
                 world_root_T_self=module_3_pose,
                 scale=Scale(x=counter_top_depth, y=module_3_width, z=counter_top_height), wall_thickness=0.02)
             for shape in module_3_cabinet.root.visual.shapes: shape.color = Color.GRAY()
-            counter_top.add(module_3_cabinet)
+            counter_top.add_object(module_3_cabinet)
 
             drawer_heights = [counter_top_height * 0.4, counter_top_height * 0.4, counter_top_height * 0.2]
             drawer_z_positions = [-0.18, 0.06, 0.24]
@@ -458,7 +418,7 @@ class KitchenEnvironment:
                 scale=Scale(x=0.02, y=center_width, z=cabinet_height)
             )
             for shape in oven_cabinet_door.root.visual.shapes: shape.color = Color.WHITE()
-            oven_cabinet_door.add_hinge(oven_cabinet_hinge)
+            oven_cabinet_door.add(oven_cabinet_hinge)
             tower.add(oven_cabinet_door)
 
             oven_cabinet_handle = Handle.create_with_new_body_in_world(
@@ -494,7 +454,7 @@ class KitchenEnvironment:
                 scale=Scale(x=oven_depth, y=center_width, z=oven_height_center)
             )
             for shape in oven.root.visual.shapes: shape.color = Color.GRAY()
-            tower.add(oven)
+            tower.add_object(oven)
 
             oven_hinge_world_pose = oven_pose @ HomogeneousTransformationMatrix.from_xyz_rpy(x=-oven_depth / 2, z=-oven_height_center / 2)
             oven_hinge = Hinge.create_with_new_body_in_world(
@@ -511,7 +471,7 @@ class KitchenEnvironment:
             for shape in oven_door.root.visual.shapes:
                 shape.color = Color.WHITE()
 
-            oven_door.add_hinge(oven_hinge)
+            oven_door.add(oven_hinge)
             oven.add(oven_door)
 
             oven_handle = Handle.create_with_new_body_in_world(
@@ -544,7 +504,7 @@ class KitchenEnvironment:
                 scale=Scale(x=0.5, y=0.6, z=0.005)
             )
             for shape in sideboard_cooktop.root.visual.shapes: shape.color = Color.BLACK()
-            sideboard.add(sideboard_cooktop)
+            sideboard.add_object(sideboard_cooktop)
 
             # Define widths for the three sections of the sideboard
             width_outer, width_middle = sideboard_length * 0.3, sideboard_length * 0.4
@@ -609,7 +569,7 @@ class KitchenEnvironment:
                     world=world, name=PrefixedName(f"cupboard_shelf_{i}"),
                     world_root_T_self=cupboard_pose @ HomogeneousTransformationMatrix.from_xyz_rpy(z=z), scale=shelf_scale)
                 for shape in shelf.root.visual.shapes: shape.color = Color.WHITE()
-                cupboard.add(shelf)
+                cupboard.add_object(shelf)
 
             cupboard_door_height, cupboard_door_width = 1.055, 0.40
             cupboard_door_z_relative = -(cupboard_scale.z / 2) + (cupboard_door_height / 2)
@@ -624,7 +584,7 @@ class KitchenEnvironment:
                 door = Door.create_with_new_body_in_world(world=world, name=PrefixedName(f"cupboard_door_{side}"),
                     world_root_T_self=handle_pose @ HomogeneousTransformationMatrix.from_xyz_rpy(y=0.2 if side=="left" else -0.2), scale=cupboard_door_scale)
                 for shape in door.root.visual.shapes: shape.color = Color.WHITE()
-                door.add_hinge(hinge)
+                door.add(hinge)
                 cupboard.add(door)
 
                 handle = Handle.create_with_new_body_in_world(world=world, name=PrefixedName(f"cupboard_handle_{side}"),
@@ -647,7 +607,7 @@ class KitchenEnvironment:
                 leg = Leg.create_with_new_body_in_world(world=world, name=PrefixedName(f"desk_leg_{i}"),
                                                        world_root_T_self=desk_pose @ HomogeneousTransformationMatrix.from_xyz_rpy(x=sx*x_offset, y=sy*y_offset, z=z_position), scale=leg_scale)
                 for shape in leg.root.visual.shapes: shape.color = desk_color
-                desk.add_leg(leg)
+                desk.add(leg)
 
             # --- MODULAR COOKING TABLE ---
             cooking_table_length, cooking_table_depth, cooking_table_height, cooking_table_thickness = 1.75, 0.64, 0.71, 0.04
@@ -658,7 +618,7 @@ class KitchenEnvironment:
             cooking_table_cooktop = Cooktop.create_with_new_body_in_world(world=world, name=PrefixedName("cooktop"),
                                                            world_root_T_self=cooking_table_pose @ HomogeneousTransformationMatrix.from_xyz_rpy(z=cooking_table_thickness/2 + 0.005), scale=Scale(0.5, 0.5, 0.01))
             for shape in cooking_table_cooktop.root.visual.shapes: shape.color = Color.BLACK()
-            cooking_table.add(cooking_table_cooktop)
+            cooking_table.add_object(cooking_table_cooktop)
 
             cooking_table_bottom = ShelfLayer.create_with_new_body_in_world(
                 world=world, name=PrefixedName("cooking_table_bottom"),
@@ -666,7 +626,7 @@ class KitchenEnvironment:
                 scale=Scale(cooking_table_length, cooking_table_depth, cooking_table_thickness))
             for shape in cooking_table_bottom.root.visual.shapes:
                 shape.color = Color.BEIGE()
-            cooking_table.add(cooking_table_bottom)
+            cooking_table.add_object(cooking_table_bottom)
 
             module_width = (cooking_table_length - 0.60) / 2
             for side in [-1, 1]:
@@ -674,7 +634,7 @@ class KitchenEnvironment:
                 module_pose = cooking_table_pose @ HomogeneousTransformationMatrix.from_xyz_rpy(x=side * (0.265 + module_width / 2), z=-cooking_table_height / 2 + cooking_table_thickness, yaw=1.5708)
                 mod = Cupboard.create_with_new_body_in_world(name=PrefixedName(f"cooking_mod_{side_name}"), world=world, world_root_T_self=module_pose, scale=Scale(module_width, cooking_table_depth, cooking_table_height - 2*cooking_table_thickness))
                 for shape in mod.bodies[0].visual.shapes: shape.color = Color.BEIGE()
-                cooking_table.add(mod)
+                cooking_table.add_object(mod)
 
                 drawer_pose = module_pose @ HomogeneousTransformationMatrix.from_xyz_rpy(z=0.2)
                 drawer = Drawer.create_with_new_body_in_world(world=world, name=PrefixedName(f"cooking_drawer_{side_name}"), world_root_T_self=drawer_pose,
@@ -708,7 +668,7 @@ class KitchenEnvironment:
                 leg = Leg.create_with_new_body_in_world(world=world, name=PrefixedName(f"dining_table_leg_{i}"),
                                                        world_root_T_self=dining_table_pose @ HomogeneousTransformationMatrix.from_xyz_rpy(x=sx*x_offset, y=sy*y_offset, z=z_position), scale=leg_scale)
                 for shape in leg.root.visual.shapes: shape.color = Color.BEIGE()
-                dining_table.add_leg(leg)
+                dining_table.add(leg)
         return world
 
     def _build_coffee_table(self, world):
@@ -733,7 +693,7 @@ class KitchenEnvironment:
             scale=Scale(length, width, 0.01)
         )
         for shape in shelf.root.visual.shapes: shape.color = color
-        table.add(shelf)
+        table.add_object(shelf)
 
         floor = ShelfLayer.create_with_new_body_in_world(
             world=world, name=PrefixedName("coffee_table_floor"),
@@ -741,7 +701,7 @@ class KitchenEnvironment:
             scale=Scale(length, width, thick)
         )
         for shape in floor.root.visual.shapes: shape.color = color
-        table.add(floor)
+        table.add_object(floor)
 
         for i, y_direction in enumerate([-1, 1]):
             side_wall_body = Body(name=PrefixedName(f"coffee_table_wall_short_{i}_body"))
