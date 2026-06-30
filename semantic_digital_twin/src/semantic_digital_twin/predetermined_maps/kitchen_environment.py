@@ -101,7 +101,7 @@ class KitchenEnvironment:
             south_wall1 = Wall.create_with_new_body_in_world(
                 world=world,
                 name=PrefixedName("south_wall1"),
-                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(y=-2.01, z=1.50),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(y=-2.01),
                 scale=Scale(x=0.05, y=1.00, z=3.00),
             )
 
@@ -109,7 +109,7 @@ class KitchenEnvironment:
                 world=world,
                 name=PrefixedName("south_wall2"),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.145, y=-1.45, z=1.50, yaw=np.pi / 2
+                    x=-0.145, y=-1.45, yaw=np.pi / 2
                 ),
                 scale=Scale(x=0.05, y=0.29, z=3.00),
             )
@@ -118,7 +118,7 @@ class KitchenEnvironment:
                 world=world,
                 name=PrefixedName("south_wall3"),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.29, y=-0.9925, z=0.50
+                    x=-0.29, y=-0.9925
                 ),
                 scale=Scale(x=0.05, y=1.085, z=1.00),
             )
@@ -127,7 +127,7 @@ class KitchenEnvironment:
                 world=world,
                 name=PrefixedName("south_wall4"),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.145, y=-0.45, z=0.50, yaw=np.pi / 2
+                    x=-0.145, y=-0.45, yaw=np.pi / 2
                 ),
                 scale=Scale(x=0.05, y=0.29, z=1.00),
             )
@@ -136,7 +136,7 @@ class KitchenEnvironment:
                 world=world,
                 name=PrefixedName("south_wall5"),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.145, y=0.45, z=0.50, yaw=np.pi / 2
+                    x=-0.145, y=0.45, yaw=np.pi / 2
                 ),
                 scale=Scale(0.05, 0.29, 1.00),
             )
@@ -145,7 +145,7 @@ class KitchenEnvironment:
                 world=world,
                 name=PrefixedName("south_wall6"),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.29025, y=1.80, z=0.50
+                    x=-0.29025, y=1.80
                 ),
                 scale=Scale(0.05, 2.75, 1.00),
             )
@@ -154,7 +154,7 @@ class KitchenEnvironment:
                 world=world,
                 name=PrefixedName("south_wall7"),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=-0.29025, y=5.16, z=0.50
+                    x=-0.29025, y=5.16
                 ),
                 scale=Scale(0.05, 2.27, 1.00),
             )
@@ -163,7 +163,7 @@ class KitchenEnvironment:
                 world=world,
                 name=PrefixedName("east_wall"),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=2.462, y=-2.535, z=1.50, yaw=np.pi / 2
+                    x=2.462, y=-2.535, yaw=np.pi / 2
                 ),
                 scale=Scale(0.05, 4.924, 3.00),
             )
@@ -172,7 +172,7 @@ class KitchenEnvironment:
                 world=world,
                 name=PrefixedName("middle_wall"),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=2.20975, y=5.00, z=0.50
+                    x=2.20975, y=5.00
                 ),
                 scale=Scale(0.05, 2.67, 1.00),
             )
@@ -181,7 +181,7 @@ class KitchenEnvironment:
                 world=world,
                 name=PrefixedName("west_wall"),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=1.9345, y=6.32, z=1.50, yaw=np.pi / 2
+                    x=1.9345, y=6.32, yaw=np.pi / 2
                 ),
                 scale=Scale(0.05, 4.449, 3.00),
             )
@@ -190,7 +190,7 @@ class KitchenEnvironment:
                 world=world,
                 name=PrefixedName("north_wall"),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=4.949, y=1.51, z=1.50
+                    x=4.949, y=1.51
                 ),
                 scale=Scale(0.05, 8.04, 3.00),
             )
