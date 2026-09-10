@@ -10,6 +10,7 @@ from coraplex.exceptions import (
     UnknownExecutionType,
 )
 from giskardpy.motion_statechart.context import MotionStatechartContext
+from giskardpy.motion_statechart.data_types import LifeCycleValues
 from giskardpy.motion_statechart.goals.collision_avoidance import (
     ExternalCollisionAvoidance,
     SelfCollisionAvoidance,
@@ -31,6 +32,67 @@ if TYPE_CHECKING:
     from coraplex.plans.plan_node import MotionNode
     from coraplex.plans.underspecified import UnderspecifiedNode
     from coraplex.datastructures.dataclasses import Context
+
+
+@dataclass
+class MotionLifeCycleTracker:
+    """
+    Keeps motion nodes' statuses on their giskard tasks' life cycle, and emits the
+    plan's node callbacks as those change during simulated execution.
+
+    A motion node is realized by a statechart task rather than performed on its own, so
+    nothing else ever sets its status: without this it stays
+    :attr:`~giskardpy.motion_statechart.data_types.LifeCycleValues.NOT_STARTED` for the
+    whole run, and anything reading the plan tree afterwards -- the viewer, a recording
+    -- shows a finished plan as untouched.
+    """
+
+    TERMINAL_STATES: ClassVar[List[LifeCycleValues]] = [
+        LifeCycleValues.SUCCEEDED,
+        LifeCycleValues.FAILED,
+    ]
+    """
+    The life cycle states a task ends in; a motion node reaching one has ended.
+    """
+
+    motion_mappings: Dict[MotionNode, Task]
+    """
+    The motion nodes and the giskard tasks realizing them.
+    """
+
+    _last_states: Dict[MotionNode, LifeCycleValues] = field(init=False)
+    """
+    The life cycle state each task had when it was last inspected.
+    """
+
+    def __post_init__(self):
+        self._last_states = {
+            motion_node: LifeCycleValues.NOT_STARTED
+            for motion_node in self.motion_mappings
+        }
+
+    def emit_transitions(self) -> None:
+        """
+        Notify the plan of every motion node whose task started or finished since the
+        last inspection.
+
+        A task that reaches a terminal state without ever being seen running still emits
+        its start first, so every ended motion node was also started.
+        """
+        for motion_node, task in self.motion_mappings.items():
+            last_state = self._last_states[motion_node]
+            current_state = task.life_cycle_state
+            if current_state == last_state:
+                continue
+            self._last_states[motion_node] = current_state
+            if last_state == LifeCycleValues.NOT_STARTED:
+                motion_node.status = LifeCycleValues.RUNNING
+                if motion_node.plan is not None:
+                    motion_node.plan.notify_node_started(motion_node)
+            if current_state in self.TERMINAL_STATES:
+                motion_node.status = current_state
+                if motion_node.plan is not None:
+                    motion_node.plan.notify_node_ended(motion_node)
 
 
 @dataclass
@@ -246,6 +308,20 @@ class GiskardExecutable(Executable):
             case _:
                 raise UnknownExecutionType(GiskardExecutable.execution_type)
 
+    def _notify_motion_tick(self, statechart: MotionStatechart) -> None:
+        """
+        Notify every plan whose motions this executable realizes of one executor tick.
+
+        :param statechart: The statechart the executor is ticking.
+        """
+        plans_by_identity = {
+            id(motion_node.plan): motion_node.plan
+            for motion_node in self.motion_mappings or {}
+            if motion_node.plan is not None
+        }
+        for plan in plans_by_identity.values():
+            plan.notify_motion_tick(statechart)
+
     def _execute_simulation(self) -> None:
         """
         Compiles the motion state chart and ticks it in the world of the context until
@@ -268,11 +344,18 @@ class GiskardExecutable(Executable):
         )
         executor.compile(self.motion_state_chart)
 
+        # Nothing else sets a motion node's status -- a statechart task realizes it --
+        # so the tracker turns those tasks' life cycles into the plan's node callbacks.
+        life_cycle_tracker = MotionLifeCycleTracker(motion_mappings=self.motion_mappings)
+        life_cycle_tracker.emit_transitions()
+
         # A chart that gives up cancels itself, which raises out of the tick doing it.
         # The robot is stopped and the chart torn down either way.
         try:
             while not executor.motion_statechart.is_end_motion():
                 executor.tick()
+                life_cycle_tracker.emit_transitions()
+                self._notify_motion_tick(executor.motion_statechart)
         finally:
             executor.set_velocity_acceleration_jerk_to_zero()
             executor.motion_statechart.cleanup_nodes(context=executor.context)

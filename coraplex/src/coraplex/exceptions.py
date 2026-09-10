@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from abc import ABC
 from dataclasses import dataclass
-from typing_extensions import TYPE_CHECKING, Type
+from typing_extensions import TYPE_CHECKING, List, Type
 
 from krrood.entity_query_language.factories import ConditionType, get_false_statements
 from krrood.exceptions import DataclassException
-from coraplex.datastructures.enums import Arms, ExecutionType
+from coraplex.datastructures.enums import Arms, ExecutionType, VisualizationBackend
 from coraplex.plans.failures import PlanFailure
 
 if TYPE_CHECKING:
@@ -357,3 +357,57 @@ class NotOnASingleLevelException(DataclassException):
 
     def suggest_correction(self) -> str:
         return f"Move the robot to a recognized level"
+
+
+@dataclass
+class VisualizationBackendUnavailable(DataclassException):
+    """
+    Raised when a requested visualization backend cannot run in this environment.
+    """
+
+    backend: VisualizationBackend
+    """
+    The backend that was requested.
+    """
+
+    reason: str
+    """
+    Why the backend is unavailable.
+    """
+
+    def error_message(self) -> str:
+        return f"The {self.backend.name} visualization backend is unavailable: {self.reason}"
+
+    def suggest_correction(self) -> str:
+        return "select another backend or run in an environment that provides it."
+
+
+@dataclass
+class UnknownVisualizationOption(DataclassException):
+    """
+    Raised when an environment variable configuring visualization holds a value that
+    does not name a member of its option enum.
+    """
+
+    environment_variable: str
+    """
+    The environment variable that was read.
+    """
+
+    value: str
+    """
+    The value the variable held.
+    """
+
+    valid_values: List[str]
+    """
+    The values the variable accepts.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"{self.environment_variable}={self.value!r} does not name a valid option."
+        )
+
+    def suggest_correction(self) -> str:
+        return f"use one of: {', '.join(self.valid_values)}."

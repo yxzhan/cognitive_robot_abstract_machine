@@ -288,16 +288,21 @@ class PlanNode(PlanEntity):
                 return
 
         self.status = LifeCycleValues.RUNNING
+        # guarded: a node built outside a plan (tests, ad-hoc designators) has none
+        if self.plan is not None:
+            self.plan.notify_node_started(self)
         try:
             self.notify()
             self.result = self.parse().execute()
+            self.status = LifeCycleValues.SUCCEEDED
         except RECOVERABLE_FAILURES as e:
             self.status = LifeCycleValues.FAILED
             self.reason = e
             raise e
         finally:
             self.end_time = datetime.now()
-        self.status = LifeCycleValues.SUCCEEDED
+            if self.plan is not None:
+                self.plan.notify_node_ended(self)
 
     def mount_subplan(self, root: PlanNode):
         """

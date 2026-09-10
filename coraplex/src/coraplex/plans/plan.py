@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from coraplex.plans.plan_callbacks import PlanCallback
     from coraplex.datastructures.dataclasses import Context
     from coraplex.plans.designator import Designator
+    from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 
 
 logger = logging.getLogger(__name__)
@@ -261,6 +262,34 @@ class Plan:
         self.initial_world = deepcopy(self.world)
         result = self.root.perform()
         return result
+
+    def notify_node_started(self, node: PlanNode) -> None:
+        """
+        Notify every registered callback that a node started executing.
+
+        :param node: The node that started.
+        """
+        for callback in self.node_callbacks:
+            callback.on_start(node)
+
+    def notify_node_ended(self, node: PlanNode) -> None:
+        """
+        Notify every registered callback that a node finished executing.
+
+        :param node: The node that ended.
+        """
+        for callback in self.node_callbacks:
+            callback.on_end(node)
+
+    def notify_motion_tick(self, statechart: MotionStatechart) -> None:
+        """
+        Notify every registered callback that the motion executor ticked once while
+        realizing this plan's motions.
+
+        :param statechart: The motion statechart the executor is ticking.
+        """
+        for callback in self.node_callbacks:
+            callback.on_motion_tick(statechart)
 
     def re_perform(self):
         for child in self.root.descendants:
