@@ -70,7 +70,10 @@ class GiskardWrapper:
             world_synchronizer=WorldSynchronizer.of_world(self.world)
         )
         giskard_topic = f"{self.giskard_node_name}/command"
-        self._client = MyActionClient(self.node_handle, JsonAction, giskard_topic)
+        # with the world, so an aborted goal's error can name the bodies it was about
+        self._client = MyActionClient(
+            self.node_handle, JsonAction, giskard_topic, world=self.world
+        )
         sleep(0.3)
 
     @property

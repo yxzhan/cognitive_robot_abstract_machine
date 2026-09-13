@@ -223,6 +223,17 @@ class Synchronizer(WorldEntityWithClassBasedID, PublicationProgress):
             synchronization message.
         """
         content = json.loads(message.data)
+        # This process's own echo, discarded before anything is resolved. Deserializing a
+        # message means looking up every entity it names in this world, and a message this
+        # world published can name entities the very modification that produced it has
+        # since removed: ``WorldReasoner``'s annotations replace each door's and drawer's
+        # joint connection with a joint body and two new connections, so the block that
+        # carries those removals refers to connections that no longer exist by the time it
+        # comes back. Resolving it then raises on a world that is perfectly consistent,
+        # and it took the receiving executor's thread down with it. The self-check used to
+        # sit *below* the deserialization, which is why it could not help.
+        if from_json(content[MessageField.META_DATA]) == self.meta_data:
+            return
         with self._world._world_lock:
             tracker = WorldEntityWithIDKwargsTracker.from_world(self._world)
             try:
@@ -234,9 +245,6 @@ class Synchronizer(WorldEntityWithClassBasedID, PublicationProgress):
                     entity_id=unknown_entity.key,
                     entity_name=unknown_entity.world_entity_name,
                 ) from unknown_entity
-
-            if deserialized_message.meta_data == self.meta_data:
-                return
 
             self._subscription_callback(deserialized_message)
 

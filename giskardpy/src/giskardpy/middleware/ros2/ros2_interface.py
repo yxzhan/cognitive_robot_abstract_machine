@@ -1,6 +1,6 @@
 import json
 import threading
-from typing import List, Tuple, Union, Any
+from typing import List, Optional, Tuple, Union, Any
 
 from action_msgs.msg import GoalStatus
 from rcl_interfaces.srv._get_parameters import (
@@ -24,6 +24,14 @@ from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.event_loop_manager import get_event_loop
 from krrood.adapters.exceptions import JSONSerializationError
 from krrood.adapters.json_serializer import from_json
+from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
+    WorldEntityWithIDKwargsTracker,
+)
+from semantic_digital_twin.exceptions import (
+    MissingWorldError,
+    WorldEntityWithIDNotInKwargs,
+)
+from semantic_digital_twin.world import World
 
 
 def msg_type_as_str(msg_type) -> str:
@@ -163,7 +171,18 @@ class MyActionClient:
     _result_future: Future | None
     _goal_counter: int
 
-    def __init__(self, node_handle: Node, action_type, action_name: str):
+    def __init__(
+        self,
+        node_handle: Node,
+        action_type,
+        action_name: str,
+        world: Optional[World] = None,
+    ):
+        """
+        :param world: The client's world, used to resolve the entities a server's error
+            refers to. See :meth:`create_abort_exception`.
+        """
+        self.world = world
         self._goal_counter = -1
         self._goal_handle = None
         self._goal_result = None
@@ -208,26 +227,52 @@ class MyActionClient:
             case _:
                 raise Exception(f"Unexpected status {result.status}")
 
-    @staticmethod
-    def create_abort_exception(result: Any) -> Exception:
+    def create_abort_exception(self, result: Any) -> Exception:
         """
         Rebuild the exception that made the server abort the goal.
 
         The action status alone cannot tell a caller whether sending the goal again
         would help, so the error itself travels in the result payload.
 
-        An error that cannot be rebuilt, because the client does not know its class or
-        cannot construct it, is reported as a plain abort; the original failure is worth
-        less than a caller that keeps working.
+        A server's error carries the statechart nodes it was raised about, and those name
+        bodies and frames -- so rebuilding it means resolving world entities, which needs
+        a world. The client's world is a synchronized copy of the server's, so the ids do
+        resolve once the deserializer is given it; without it, resolution raises
+        ``MissingWorldError`` from deep inside and **masks the very failure the payload
+        was carrying**.
+
+        An error that still cannot be rebuilt, because the client does not know its class
+        or cannot construct it, is reported as a plain abort -- the original failure is
+        worth less than a caller that keeps working -- but it is logged first, so the
+        reason does not disappear with it.
         """
         payload = json.loads(result.result.result)
         error = payload.get("error")
         if error is None:
             return ExecutionAbortedException()
         try:
-            return from_json(error)
-        except (JSONSerializationError, TypeError):
+            return from_json(error, **self._world_entity_kwargs())
+        except (
+            JSONSerializationError,
+            TypeError,
+            MissingWorldError,
+            WorldEntityWithIDNotInKwargs,
+        ) as failure:
+            self.node_handle.get_logger().warning(
+                f"{self.action_name}: could not rebuild the server's error "
+                f"({type(failure).__name__}: {failure}); reporting a plain abort. "
+                f"The payload carried: {json.dumps(error)[:1000]}"
+            )
             return ExecutionAbortedException()
+
+    def _world_entity_kwargs(self) -> dict:
+        """
+        What ``from_json`` needs to resolve the world entities an error refers to, or
+        nothing when this client was built without a world.
+        """
+        if self.world is None:
+            return {}
+        return WorldEntityWithIDKwargsTracker.from_world(self.world).create_kwargs()
 
     def __goal_accepted_cb(self, future: Future):
         goal_handle = future.result()
