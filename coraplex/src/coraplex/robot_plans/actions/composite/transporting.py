@@ -113,7 +113,7 @@ class TransportAction(ActionDescription, HasGraspChoice, HasApproachesGraspPoses
                     retreat_distance=self.retreat_distance,
                 ),
                 ParkArmsAction(Arms.BOTH),
-                MoveTorsoAction(TorsoState.HIGH),
+                MoveTorsoAction(TorsoState.MID),
                 self._make_navigate_action_for_placing(self.grasp_pose),
                 a(PlaceAction)(
                     object_designator=self.object_designator.root,
