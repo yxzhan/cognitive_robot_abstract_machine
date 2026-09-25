@@ -15,6 +15,7 @@ import numpy as np
 import rclpy  # type: ignore
 import std_msgs.msg
 from rclpy.node import Node as RosNode
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.publisher import Publisher
 from rclpy.subscription import Subscription
 from sqlalchemy import select
@@ -78,6 +79,29 @@ class PublicationProgress(ABC):
         The position of the last published message, together with its publisher.
         """
         raise NotImplementedError
+
+
+SYNCHRONIZATION_QOS = QoSProfile(
+    history=HistoryPolicy.KEEP_LAST, depth=50, reliability=ReliabilityPolicy.RELIABLE
+)
+"""
+The quality of service every synchronizer publishes and subscribes with.
+
+A deep queue, because every message of the stream is needed: a model block that is
+lost leaves the receiving world without the entities the next state update names, and
+it stops on :class:`~semantic_digital_twin.exceptions.StateUpdateContainsUnknownDegreesOfFreedomError`.
+A receiver deserializes each message under its world lock, so while it applies a large
+model change (a spawned mesh is ~1 MB and recompiles the kinematics) the messages behind
+it queue -- a depth of 10 overwrote them within a burst of spawns.
+
+Not ``KEEP_ALL``, which was tried: a reliable keep-all writer *blocks* in ``publish``
+once a reader falls behind, and a receiver that falls behind is not an exception -- a
+world applying every state update of a controller at its own pace. The block reached
+the publisher's control loop, which then ran late until its QP turned infeasible, and
+ended in ``Failed to publish: cannot publish data``. A bounded history never blocks the
+writer; a thousand messages absorb any burst a working receiver falls behind by, and
+only one that has stopped for good loses the oldest.
+"""
 
 
 @dataclass
@@ -161,10 +185,10 @@ class Synchronizer(WorldEntityWithClassBasedID, PublicationProgress):
             std_msgs.msg.String,
             topic=self.topic_name,
             callback=self.subscription_callback,
-            qos_profile=10,
+            qos_profile=SYNCHRONIZATION_QOS,
         )
         self.publisher = self.node.create_publisher(
-            std_msgs.msg.String, topic=self.topic_name, qos_profile=10
+            std_msgs.msg.String, topic=self.topic_name, qos_profile=SYNCHRONIZATION_QOS
         )
         self.wait_until_connected()
 
