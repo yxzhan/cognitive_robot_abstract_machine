@@ -92,7 +92,7 @@ class ControlLoop:
         self.apply_world_updates()
         self.inputs.synchronize()
         self.raise_if_canceled()
-        self.executor.tick()
+        self.tick_executor()
         self.publish_commands()
         self.feedback_publisher.publish_if_changed()
         self.cycle_counter.tick()
@@ -109,6 +109,24 @@ class ControlLoop:
         self.world_updates.apply_state_updates()
         if self.world_updates.has_pending_model_change:
             raise WorldModelModifiedDuringMotionError()
+
+    def tick_executor(self) -> None:
+        """
+        Compute the next command, publishing the state it integrates only when no
+        measurement will replace it.
+
+        When the robot's state is measured, the state the controller integrates is a
+        prediction that the next cycle overwrites with the measurement. Publishing both
+        sends every other process a prediction followed by a measurement that usually
+        lags behind it, so their copy of the robot jumps forward and back every cycle.
+        A degree of freedom no input measures is not lost: the next cycle's
+        announcement carries every change since the last publication.
+        """
+        if not self.inputs.synchronizers:
+            self.executor.tick()
+            return
+        with self.world.batch_state_changes(publish_changes=False):
+            self.executor.tick()
 
     def raise_if_canceled(self) -> None:
         """

@@ -89,11 +89,14 @@ class WorldStateInputs:
         Write all inputs into the world state and announce the change.
 
         Nothing is announced when no input wrote, because announcing recomputes the
-        forward kinematics and reaches every observer of the world.
+        forward kinematics and reaches every observer of the world. The inputs are
+        announced as one change, even those whose writes notify on their own, such as a
+        connection's origin.
         """
-        if not self.apply_inputs():
-            return
-        self.announce_state()
+        with self.world.batch_state_changes():
+            if not self.apply_inputs():
+                return
+            self.announce_state()
 
     def synchronize_and_announce(self) -> None:
         """
@@ -103,8 +106,9 @@ class WorldStateInputs:
         Use this where nothing else announces, so that the observers of the world do not
         go stale.
         """
-        self.apply_inputs()
-        self.announce_state()
+        with self.world.batch_state_changes():
+            self.apply_inputs()
+            self.announce_state()
 
     def announce_state(self) -> None:
         """
